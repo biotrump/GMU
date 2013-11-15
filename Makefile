@@ -3,6 +3,7 @@
 
 SRC=src/
 DOC=doc/
+DATA=data/
 TARFILE=gmu-xsimon14-xsiruc01.tar.gz
 DOCFILE=$(DOC)gmu.pdf
 
@@ -17,7 +18,7 @@ doc:
 	make -C $(DOC)
 
 
-clean: clean-src# clean-doc
+clean: clean-src clean-doc
 
 clean-src:
 	make -C $(SRC) clean
