@@ -1,6 +1,22 @@
 /*
- * opencl kernels
+ * Accelerated k-means and mean-shift algorithms via OpenCL
+ * Authors: Martin Simon & Pavel Sirucek
+ *
+ * OpenCL kernels
  */
+
+
+__kernel void k_means()
+{
+}
+
+__kernel void mean_shift()
+{
+}
+
+
+
+//TODO delete following
 
 __kernel void edge_x( __global uchar4* input, __global uchar4* output, uint width, uint height, __local float4* cache)
 {
@@ -30,14 +46,14 @@ __kernel void edge_x( __global uchar4* input, __global uchar4* output, uint widt
 		}
 
 		barrier(CLK_LOCAL_MEM_FENCE);
-		
+
 		if(lx + kw < width-1 && lx > 0 && lx < lw - 1)
 		{
-			output[gindex] = convert_uchar4(fabs(cache[lx - 1] - cache[lx + 1]));			
+			output[gindex] = convert_uchar4(fabs(cache[lx - 1] - cache[lx + 1]));
 		}
 
 		kw += lw - 1;
-	}	
+	}
 }
 
 __kernel void edge_y( __global uchar4* input, __global uchar4* output, uint width, uint height, __local float4* cache)
@@ -68,14 +84,14 @@ __kernel void edge_y( __global uchar4* input, __global uchar4* output, uint widt
 		}
 
 		barrier(CLK_LOCAL_MEM_FENCE);
-		
+
 		if(ly + kh < height-1 && ly > 0 && ly < lh - 1)
 		{
 			output[gindex] = convert_uchar4_sat_rte(fabs(cache[ly - 1] - cache[ly + 1]));
 		}
 
 		kh += lh - 1;
-	}	
+	}
 }
 
 
