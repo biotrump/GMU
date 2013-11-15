@@ -12,6 +12,13 @@
 *.la
 *.a
 
-
+# User-defined
 nbproject/
 src/gmu
+*.pdf
+*.tar.gz
+
+# Images (binary)
+*.png
+*.jpg
+*.bmp
