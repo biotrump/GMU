@@ -5,11 +5,14 @@
 #include <stdio.h>
 #include <CL/opencl.h>
 #include <stdlib.h>
+#include <fstream>
+#include <iostream>
 
+using namespace std;
 
 #define MIN(a, b) ((a) > (b) ? (b) : (a))
-#define B_KMEANS true
-#define B_MEANSHIFT false
+#define B_KMEANS 1
+#define B_MEANSHIFT 2
 
 //global variables
 
@@ -18,7 +21,7 @@ SDL_Surface *screen;
 cl_uchar4* h_inputImageData = NULL;
 cl_uchar4* h_outputImageData = NULL;
 
-bool algorithm; //used algorithm
+int algorithm; //used algorithm
 
 //width and height of the image
 int width = 0, height = 0;
@@ -29,14 +32,23 @@ cl_uint pixelSize = 32; //rgba 8bits per channel
 cl_context context;
 cl_command_queue commandQueue;
 cl_kernel edgeXKernel, edgeYKernel, kmeansResultKernel;
+cl_kernel meanshiftKernel, meanshiftResultKernel;
+cl_kernel msKernel, msResult;
 cl_program program;
 
 
 /** CL memory buffer for images */
 cl_mem d_inputImageBuffer = NULL;
+cl_mem d_outputImageBuffer = NULL;
+
+/* k-means memory buffers */
 cl_mem d_edgeXImageBuffer = NULL;
 cl_mem d_edgeYImageBuffer = NULL;
-cl_mem d_outputImageBuffer = NULL;
+
+/* mean-shift memory buffers */
+cl_mem d_countsBuffer = NULL;
+cl_mem d_peaksBuffer = NULL;
+
 
 //the size of our blocks
 
@@ -46,6 +58,13 @@ cl_mem d_outputImageBuffer = NULL;
 size_t kernelWorkGroupSize = 1024;
 size_t blockSizeX = 1024;
 size_t blockSizeY = 1;
+
+/* Size of mean-shift window */
+int msWinSize = 5;
+
+/* Maximal length of mean-shift */
+float msMaxLength = 10.0f;
+
 
 int printTiming(cl_event event, const char* title)
 {
@@ -358,19 +377,18 @@ int setupCL()
     else
     {
         /* Mean-shift section */
-
         /* Set all mid buffers needed by mean-shift here */
-        d_edgeXImageBuffer = clCreateBuffer(context,
+        d_peaksBuffer = clCreateBuffer(context,
                                             CL_MEM_READ_WRITE,
-                                            width * height * pixelSize,
+                                       width * height * sizeof (cl_uint),
                                             0, &ciErr);
-        CheckOpenCLError(ciErr, "CreateBuffer edgeX");
+        CheckOpenCLError(ciErr, "CreateBuffer peaks (mean-shift)");
 
-        d_edgeYImageBuffer = clCreateBuffer(context,
+        d_countsBuffer = clCreateBuffer(context,
                                             CL_MEM_READ_WRITE,
-                                            width * height * pixelSize,
+                                        width * height * sizeof (cl_uint),
                                             0, &ciErr);
-        CheckOpenCLError(ciErr, "CreateBuffer edgeY");
+        CheckOpenCLError(ciErr, "CreateBuffer counts (mean-shift)");
     }
 
 
@@ -475,15 +493,13 @@ int setupCL()
         /* ================================================================== */
 
         // kernels - create kernels
-        kmeansResultKernel = clCreateKernel(program, "edge_result", &ciErr);
-        CheckOpenCLError(ciErr, "clCreateKernel edge_result");
-        edgeXKernel = clCreateKernel(program, "edge_x", &ciErr);
-        CheckOpenCLError(ciErr, "clCreateKernel edge_x");
-        edgeYKernel = clCreateKernel(program, "edge_y", &ciErr);
-        CheckOpenCLError(ciErr, "clCreateKernel edge_y");
+        meanshiftKernel = clCreateKernel(program, "mean_shift", &ciErr);
+        CheckOpenCLError(ciErr, "clCreateKernel mean_shift");
+        meanshiftResultKernel = clCreateKernel(program, "mean_shift_result", &ciErr);
+        CheckOpenCLError(ciErr, "clCreateKernel mean_shift_result");
 
         // Check group size against group size returned by kernel
-        ciErr = clGetKernelWorkGroupInfo(kmeansResultKernel,
+        ciErr = clGetKernelWorkGroupInfo(meanshiftResultKernel,
                                          cdDevices[deviceIndex],
                                          CL_KERNEL_WORK_GROUP_SIZE,
                                          sizeof (size_t),
@@ -492,16 +508,7 @@ int setupCL()
         CheckOpenCLError(ciErr, "clGetKernelInfo");
         kernelWorkGroupSize = MIN(tempKernelWorkGroupSize, kernelWorkGroupSize);
 
-        ciErr = clGetKernelWorkGroupInfo(edgeXKernel,
-                                         cdDevices[deviceIndex],
-                                         CL_KERNEL_WORK_GROUP_SIZE,
-                                         sizeof (size_t),
-                                         &tempKernelWorkGroupSize,
-                                         0);
-        CheckOpenCLError(ciErr, "clGetKernelInfo");
-        kernelWorkGroupSize = MIN(tempKernelWorkGroupSize, kernelWorkGroupSize);
-
-        ciErr = clGetKernelWorkGroupInfo(edgeYKernel,
+        ciErr = clGetKernelWorkGroupInfo(meanshiftKernel,
                                          cdDevices[deviceIndex],
                                          CL_KERNEL_WORK_GROUP_SIZE,
                                          sizeof (size_t),
@@ -510,7 +517,6 @@ int setupCL()
         CheckOpenCLError(ciErr, "clGetKernelInfo");
         kernelWorkGroupSize = MIN(tempKernelWorkGroupSize, kernelWorkGroupSize);
     }
-
 
 
     if ((blockSizeX * blockSizeY) > kernelWorkGroupSize)
@@ -532,35 +538,35 @@ int setupCL()
     return 0;
 }
 
-int checkWorkgroupSize(cl_kernel &pkernel)
-{
-    cl_int ciErr = CL_SUCCESS;
-    size_t tempKernelWorkGroupSize;
-    ciErr = clGetKernelWorkGroupInfo(pkernel,
-                                     NULL, //this only workes if single device
-                                     CL_KERNEL_WORK_GROUP_SIZE,
-                                     sizeof (size_t),
-                                     &tempKernelWorkGroupSize,
-                                     0);
-    CheckOpenCLError(ciErr, "clGetKernelInfo %u", tempKernelWorkGroupSize);
-    kernelWorkGroupSize = MIN(tempKernelWorkGroupSize, kernelWorkGroupSize);
-
-    if ((blockSizeX * blockSizeY) > kernelWorkGroupSize)
-    {
-        printf("Out of Resources!\n");
-        printf("Group Size specified: %i\n", blockSizeX * blockSizeY);
-        printf("Max Group Size supported on the kernel: %i\n", kernelWorkGroupSize);
-        printf("Falling back to %i.\n", kernelWorkGroupSize);
-
-        if (blockSizeX > kernelWorkGroupSize)
-        {
-            blockSizeX = kernelWorkGroupSize;
-            blockSizeY = 1;
-            return EXIT_FAILURE;
-        }
-    }
-    return EXIT_SUCCESS;
-}
+//int checkWorkgroupSize(cl_kernel &pkernel)
+//{
+//    cl_int ciErr = CL_SUCCESS;
+//    size_t tempKernelWorkGroupSize;
+//    ciErr = clGetKernelWorkGroupInfo(pkernel,
+//                                     NULL, //this only workes if single device
+//                                     CL_KERNEL_WORK_GROUP_SIZE,
+//                                     sizeof (size_t),
+//                                     &tempKernelWorkGroupSize,
+//                                     0);
+//    CheckOpenCLError(ciErr, "clGetKernelInfo %u", tempKernelWorkGroupSize);
+//    kernelWorkGroupSize = MIN(tempKernelWorkGroupSize, kernelWorkGroupSize);
+//
+//    if ((blockSizeX * blockSizeY) > kernelWorkGroupSize)
+//    {
+//        printf("Out of Resources!\n");
+//        printf("Group Size specified: %i\n", blockSizeX * blockSizeY);
+//        printf("Max Group Size supported on the kernel: %i\n", kernelWorkGroupSize);
+//        printf("Falling back to %i.\n", kernelWorkGroupSize);
+//
+//        if (blockSizeX > kernelWorkGroupSize)
+//        {
+//            blockSizeX = kernelWorkGroupSize;
+//            blockSizeY = 1;
+//            return EXIT_FAILURE;
+//        }
+//    }
+//    return EXIT_SUCCESS;
+//}
 
 /**
  * This function runs kernels for k-means algorithm
@@ -806,164 +812,118 @@ int runKMeansKernels()
 int runMeanShiftKernels()
 {
     int status;
-    cl_event event_result, event_edgeX, event_edgeY;
+    cl_event event_result, event_meanshift;
 
     /* Setup arguments to the kernel */
 
     //////////////////////////////////////////////////////////////////////////////////////////////////
-    // EDGE X
+    // mean-shift
 
     /* input buffer */
-    status = clSetKernelArg(edgeXKernel,
+    status = clSetKernelArg(meanshiftKernel,
                             0,
                             sizeof (cl_mem),
                             &d_inputImageBuffer);
     CheckOpenCLError(status, "clSetKernelArg. (inputImage)");
 
-    /* output buffer */
-    status = clSetKernelArg(edgeXKernel,
+    /* peaks buffer */
+    status = clSetKernelArg(meanshiftKernel,
                             1,
                             sizeof (cl_mem),
-                            &d_edgeXImageBuffer);
+                            &d_peaksBuffer);
 
-    CheckOpenCLError(status, "clSetKernelArg. (edgeXImage)");
+    CheckOpenCLError(status, "clSetKernelArg. (peaksBuffer)");
+
+    /* counts buffer */
+    status = clSetKernelArg(meanshiftKernel,
+                            2,
+                            sizeof (cl_mem),
+                            &d_countsBuffer);
+
+    CheckOpenCLError(status, "clSetKernelArg. (countsBuffer)");
+
+    /* local memory */
+    uint cache_size = (msWinSize) * (msWinSize);
+    status = clSetKernelArg(edgeXKernel,
+                            3,
+                            sizeof (cl_float) * cache_size,
+                            0);
 
     /* image width */
-    status = clSetKernelArg(edgeXKernel,
-                            2,
+    status = clSetKernelArg(meanshiftKernel,
+                            4,
                             sizeof (cl_uint),
                             &width);
 
     CheckOpenCLError(status, "clSetKernelArg. (width)");
 
     /* image height */
-    status = clSetKernelArg(edgeXKernel,
-                            3,
+    status = clSetKernelArg(meanshiftKernel,
+                            5,
                             sizeof (cl_uint),
                             &height);
 
     CheckOpenCLError(status, "clSetKernelArg. (height)");
 
+    /* window size */
+    status = clSetKernelArg(meanshiftKernel,
+                            6,
+                            sizeof (cl_uint),
+                            &msWinSize);
 
-    /* local memory */
-    int cache_size = (blockSizeX) * (blockSizeY);
-    status = clSetKernelArg(edgeXKernel,
-                            4,
-                            sizeof (cl_float4) * cache_size,
-                            0);
+    CheckOpenCLError(status, "clSetKernelArg. (msWinSize)");
 
-    CheckOpenCLError(status, "clSetKernelArg. (local cache) %u", sizeof (cl_float4) * cache_size);
+    /* max length */
+    status = clSetKernelArg(meanshiftKernel,
+                            6,
+                            sizeof (cl_float),
+                            &msMaxLength);
+
+    CheckOpenCLError(status, "clSetKernelArg. (maxlength)");
 
     //the global number of threads in each dimension has to be divisible
     // by the local dimension numbers
-    size_t globalThreadsEdgeX[] = {
+    size_t globalThreadsMeanshift[] = {
         blockSizeX,
         height
     };
-    size_t localThreadsEdgeX[] = {blockSizeX, 1};
+    size_t localThreadsMeanshift[] = {blockSizeX, 1};
 
-    status = clEnqueueNDRangeKernel(commandQueue,
-                                    edgeXKernel,
+    status = clEnqueueNDRangeKernel(commandQueue, //TODO is this correct???
+                                    meanshiftKernel,
                                     2,
                                     NULL, //offset
-                                    globalThreadsEdgeX,
-                                    localThreadsEdgeX,
+                                    globalThreadsMeanshift,
+                                    localThreadsMeanshift,
                                     0,
                                     NULL,
-                                    &event_edgeX);
+                                    &event_meanshift);
 
-    CheckOpenCLError(status, "clEnqueueNDRangeKernel edgeX.");
-
-
-    status = clWaitForEvents(1, &event_edgeX);
-    CheckOpenCLError(status, "clWaitForEvents edgeX.");
-    //////////////////////////////////////////////////////////////////////////////////////////////////
-    // EDGE Y
-
-    /* input buffer */
-    status = clSetKernelArg(edgeYKernel,
-                            0,
-                            sizeof (cl_mem),
-                            &d_inputImageBuffer);
-    CheckOpenCLError(status, "clSetKernelArg. (inputImage)");
-
-    /* output buffer */
-    status = clSetKernelArg(edgeYKernel,
-                            1,
-                            sizeof (cl_mem),
-                            &d_edgeYImageBuffer);
-
-    CheckOpenCLError(status, "clSetKernelArg. (edgeYImage)");
-
-    /* image width */
-    status = clSetKernelArg(edgeYKernel,
-                            2,
-                            sizeof (cl_uint),
-                            &width);
-
-    CheckOpenCLError(status, "clSetKernelArg. (width)");
-
-    /* image height */
-    status = clSetKernelArg(edgeYKernel,
-                            3,
-                            sizeof (cl_uint),
-                            &height);
-
-    CheckOpenCLError(status, "clSetKernelArg. (height)");
+    CheckOpenCLError(status, "clEnqueueNDRangeKernel meanshift.");
 
 
-    /* local memory */
-    cache_size = (blockSizeX) * (blockSizeY);
-    status = clSetKernelArg(edgeYKernel,
-                            4,
-                            sizeof (cl_float4) * cache_size,
-                            0);
-
-    CheckOpenCLError(status, "clSetKernelArg. (local cache)");
-
-
-    //the global number of threads in each dimension has to be divisible
-    // by the local dimension numbers
-    size_t globalThreadsEdgeY[] = {
-        width,
-        blockSizeX
-    };
-    size_t localThreadsEdgeY[] = {1, blockSizeX};
-
-    status = clEnqueueNDRangeKernel(commandQueue,
-                                    edgeYKernel,
-                                    2,
-                                    NULL, //offset
-                                    globalThreadsEdgeY,
-                                    localThreadsEdgeY,
-                                    0,
-                                    NULL,
-                                    &event_edgeY);
-
-    CheckOpenCLError(status, "clEnqueueNDRangeKernel edgeY.");
-
-    status = clWaitForEvents(1, &event_edgeY);
-    CheckOpenCLError(status, "clWaitForEvents edgeY.");
+    status = clWaitForEvents(1, &event_meanshift);
+    CheckOpenCLError(status, "clWaitForEvents meanshift.");
 
     //////////////////////////////////////////////////////////////////////////////////////////////////
     // RESULT KERNEL
     /* input buffer X*/
-    status = clSetKernelArg(kmeansResultKernel,
+    status = clSetKernelArg(meanshiftResultKernel,
                             0,
                             sizeof (cl_mem),
-                            &d_edgeXImageBuffer);
-    CheckOpenCLError(status, "clSetKernelArg. (inputImage)");
+                            &d_countsBuffer);
+    CheckOpenCLError(status, "clSetKernelArg. (countsBuffer)");
 
 
     /* input buffer Y*/
-    status = clSetKernelArg(kmeansResultKernel,
+    status = clSetKernelArg(meanshiftResultKernel,
                             1,
                             sizeof (cl_mem),
-                            &d_edgeYImageBuffer);
-    CheckOpenCLError(status, "clSetKernelArg. (inputImage)");
+                            &d_peaksBuffer);
+    CheckOpenCLError(status, "clSetKernelArg. (peaksBuffer)");
 
     /* output buffer */
-    status = clSetKernelArg(kmeansResultKernel,
+    status = clSetKernelArg(meanshiftResultKernel,
                             2,
                             sizeof (cl_mem),
                             &d_outputImageBuffer);
@@ -971,7 +931,7 @@ int runMeanShiftKernels()
     CheckOpenCLError(status, "clSetKernelArg. (outputImage)");
 
     /* image width */
-    status = clSetKernelArg(kmeansResultKernel,
+    status = clSetKernelArg(meanshiftResultKernel,
                             3,
                             sizeof (cl_uint),
                             &width);
@@ -979,7 +939,7 @@ int runMeanShiftKernels()
     CheckOpenCLError(status, "clSetKernelArg. (width)");
 
     /* image height */
-    status = clSetKernelArg(kmeansResultKernel,
+    status = clSetKernelArg(meanshiftResultKernel,
                             4,
                             sizeof (cl_uint),
                             &height);
@@ -995,11 +955,11 @@ int runMeanShiftKernels()
     };
     size_t localThreadsResult[] = {blockSizeX, blockSizeY};
 
-    cl_event wait_events[] = {event_edgeX, event_edgeY};
+    cl_event wait_events[] = {event_meanshift};
 
 
-    status = clEnqueueNDRangeKernel(commandQueue,
-                                    kmeansResultKernel,
+    status = clEnqueueNDRangeKernel(commandQueue, //TODO is this correct????
+                                    meanshiftResultKernel,
                                     2,
                                     NULL, //offset
                                     globalThreadsResult,
@@ -1013,9 +973,8 @@ int runMeanShiftKernels()
     status = clWaitForEvents(1, &event_result);
     CheckOpenCLError(status, "clWaitForEvents.");
 
-    printTiming(event_edgeX, "Edge X: ");
-    printTiming(event_edgeX, "Edge Y: ");
-    printTiming(event_result, "Edge Result: ");
+    printTiming(event_meanshift, "Mean-shift: ");
+    printTiming(event_result, "Mean-shift Result: ");
 
     //Read back the image - if textures were used for showing this wouldn't be necessary
     //blocking read
@@ -1057,17 +1016,15 @@ int cleanup()
     else
     {
         /* Mean-shift section */
-        status = clReleaseKernel(kmeansResultKernel);
-        CheckOpenCLError(status, "clReleaseKernel edgeResult.");
-        status = clReleaseKernel(edgeXKernel);
-        CheckOpenCLError(status, "clReleaseKernel edgeX.");
-        status = clReleaseKernel(edgeYKernel);
-        CheckOpenCLError(status, "clReleaseKernel edgeY.");
+        status = clReleaseKernel(meanshiftResultKernel);
+        CheckOpenCLError(status, "clReleaseKernel meanshiftResult.");
+        status = clReleaseKernel(meanshiftKernel);
+        CheckOpenCLError(status, "clReleaseKernel meanshift.");
 
-        status = clReleaseMemObject(d_edgeXImageBuffer);
-        CheckOpenCLError(status, "clReleaseMemObject edgeX");
-        status = clReleaseMemObject(d_edgeYImageBuffer);
-        CheckOpenCLError(status, "clReleaseMemObject edgeY");
+        status = clReleaseMemObject(d_countsBuffer);
+        CheckOpenCLError(status, "clReleaseMemObject countsBuffer");
+        status = clReleaseMemObject(d_peaksBuffer);
+        CheckOpenCLError(status, "clReleaseMemObject peaksBuffer");
     }
 
     status = clReleaseProgram(program);
@@ -1099,13 +1056,20 @@ int main(int argc, char* argv[])
 {
     if (argc != 3)
     {
+        cerr << "Nedostatecny pocet parametru!" << endl;
         return 1;
     }
 
-    if (std::string(argv[1]) == "km")
+    if (string(argv[1]) == "km")
         algorithm = B_KMEANS;
-    else if (std::string(argv[1]) == "ms")
+    else if (string(argv[1]) == "ms")
         algorithm = B_MEANSHIFT;
+    else
+    {
+        cerr << "Nerozpoznany parametr: " << argv[1] << endl;
+        cerr << "Pouzijte 'ms' pro mean-shift nebo 'km' pro k-means." << endl;
+        return 1;
+    }
 
     // Init SDL - only video subsystem will be used
     if (SDL_Init(SDL_INIT_VIDEO) < 0) throw SDL_Exception();
@@ -1187,6 +1151,13 @@ void onWindowResized(int width, int height)
  */
 void onKeyDown(SDLKey key, SDLMod mod)
 {
+    switch (key)
+    {
+    case SDLK_q:
+    case SDLK_x:
+    case SDLK_ESCAPE:
+        quit();
+    }
 }
 
 /**

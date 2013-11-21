@@ -10,11 +10,95 @@ __kernel void k_means()
 {
 }
 
-__kernel void mean_shift()
+__kernel void mean_shift(__global uchar4* input, __global uint* peaks, __global uint* counts,
+__local float* cache, uint width, uint height, uint winsize, float maxlength)
 {
+int x = get_global_id(0);
+int y = get_global_id(1);
+
+
+//reconstruct window by given param
+int actx = x;
+int acty = y;
+int wymax = acty + ((winsize-1) / 2) + 1;
+int wymin = acty - ((winsize-1) / 2);
+int wxmax = actx + ((winsize-1) / 2) + 1;
+int wxmin = actx - ((winsize-1) / 2);
+
+//begincycle - until the step is bigger than given
+do {
+    for (int wy = wymin; wy < wymax; wy++)
+    {
+        for (int wx = wxmin; wx < wxmax; wx++)
+        {
+            if (wx < 0 || wy < 0 || wx > width-1|| wy > height-1)
+            {
+                //out of original window
+                //set 0 to the position of the x in local cache
+                cache[wx - wxmin + (wy-wymin)*winsize] = convert_float(0);
+            }
+            else if (wx == actx && wy == acty)
+            {
+                //set 1 to the position of the x
+                //to [actx-wxmin,acty-wymin] set 1
+                cache[wx - wxmin + (wy-wymin)*winsize] = convert_float(1);
+            }
+            else
+            {
+                //compute lengths for [wx,wy] - [x,y]
+                //if the length is bigger the maxlength, set 0 there
+                //otherwise set the length
+                float length = 1 - 1/sqrt(
+                    (actx-wx)*(actx-wx) +
+                    (acty-wy)*(acty-wy) +
+                    (input[actx + acty*width].s0 - input[wx + wy*width].s0)*(input[actx + acty*width].s0 - input[wx + wy*width].s0) +
+                    (input[actx + acty*width].s1 - input[wx + wy*width].s1)*(input[actx + acty*width].s1 - input[wx + wy*width].s1) +
+                    (input[actx + acty*width].s2 - input[wx + wy*width].s2)*(input[actx + acty*width].s2 - input[wx + wy*width].s2));
+                if (length > maxlength)
+                {
+                    cache[wx - wxmin + (wy-wymin)*winsize] = convert_float(0);
+                }
+                else
+                {
+                    cache[wx - wxmin + (wy-wymin)*winsize] = convert_float(1-length);
+                }
+            }
+        }
+    }
+
+//recompute mean of the window
+//TODO how?
+
+//shift the window to the mean be in the center
+//actx = newx
+//acty = newy
+wymax = acty + ((winsize-1) / 2) + 1;
+wymin = acty - ((winsize-1) / 2);
+wxmax = actx + ((winsize-1) / 2) + 1;
+wxmin = actx - ((winsize-1) / 2);
+
+//endcycle
+} while (/* step > threshold */);
+
+//store the peak position to peaks array
+peaks[x+y*width] = actx + acty*width;
+//incement value on peak position in counts array
+counts[actx + acty*width] = counts[actx + acty*width] + 1;
+
 }
 
+__kernel void mean_shift_result(__global uint* counts, __global uint* peaks, __global uchar4* output, uint width, uint height)
+{
+	int x = get_global_id(0);
+	int y = get_global_id(1);
 
+	if(x < width && y < height)
+	{
+		int gid = x + y*width;
+		output[gid] = add_sat(sobel_x[gid], sobel_y[gid]);
+		output[gid].s3 = 255;
+	}
+}
 
 //TODO delete following
 
