@@ -24,8 +24,20 @@ int wymax = acty + ((winsize-1) / 2) + 1;
 int wymin = acty - ((winsize-1) / 2);
 int wxmax = actx + ((winsize-1) / 2) + 1;
 int wxmin = actx - ((winsize-1) / 2);
+int oldx = x;
+int oldy = y;
 
-//begincycle - until the step is bigger than given
+//cycle control value
+bool cont = true;
+
+//mean structures
+float denominatorX = 0;
+float numeratorX = 0;
+float denominatorY = 0;
+float numeratorY = 0;
+float fNumerator;
+
+//begincycle - until the step is bigger than relevant
 do {
     for (int wy = wymin; wy < wymax; wy++)
     {
@@ -60,29 +72,46 @@ do {
                 }
                 else
                 {
+                    //store the value to its place
                     cache[wx - wxmin + (wy-wymin)*winsize] = convert_float(1-length);
+
+                    //add numerator and denominator for the X mean computation
+                    fNumerator = sqrt((wx-actx)*(wx-actx));
+                    numeratorX += fNumerator * (1-length);
+                    denominatorX += fNumerator;
+
+                    //add numerator and denominator for the Y mean computation
+                    fNumerator = sqrt((wy-acty)*(wy-acty));
+                    numeratorY += fNumerator * (1-length);
+                    denominatorY += fNumerator;
                 }
             }
         }
     }
 
-//recompute mean of the window
-//TODO how?
+    //recompute mean of the window
+    actx = convert_int(numeratorX/denominatorX);
+    acty = convert_int(numeratorY/denominatorY);
 
-//shift the window to the mean be in the center
-//actx = newx
-//acty = newy
-wymax = acty + ((winsize-1) / 2) + 1;
-wymin = acty - ((winsize-1) / 2);
-wxmax = actx + ((winsize-1) / 2) + 1;
-wxmin = actx - ((winsize-1) / 2);
+    //shift the window to the mean be in the center
+    wymax = acty + ((winsize-1) / 2) + 1;
+    wymin = acty - ((winsize-1) / 2);
+    wxmax = actx + ((winsize-1) / 2) + 1;
+    wxmin = actx - ((winsize-1) / 2);
 
-//endcycle
-} while (/* step > threshold */);
+    if (actx == oldx && acty == oldy)
+    {
+        //the step is lower the 0.5pix
+        cont = false;
+    }
+
+    //endcycle
+} while (cont);
 
 //store the peak position to peaks array
 peaks[x+y*width] = actx + acty*width;
-//incement value on peak position in counts array
+
+//increment value on peak position in counts array
 counts[actx + acty*width] = counts[actx + acty*width] + 1;
 
 }
