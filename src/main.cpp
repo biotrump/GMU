@@ -538,36 +538,6 @@ int setupCL()
     return 0;
 }
 
-//int checkWorkgroupSize(cl_kernel &pkernel)
-//{
-//    cl_int ciErr = CL_SUCCESS;
-//    size_t tempKernelWorkGroupSize;
-//    ciErr = clGetKernelWorkGroupInfo(pkernel,
-//                                     NULL, //this only workes if single device
-//                                     CL_KERNEL_WORK_GROUP_SIZE,
-//                                     sizeof (size_t),
-//                                     &tempKernelWorkGroupSize,
-//                                     0);
-//    CheckOpenCLError(ciErr, "clGetKernelInfo %u", tempKernelWorkGroupSize);
-//    kernelWorkGroupSize = MIN(tempKernelWorkGroupSize, kernelWorkGroupSize);
-//
-//    if ((blockSizeX * blockSizeY) > kernelWorkGroupSize)
-//    {
-//        printf("Out of Resources!\n");
-//        printf("Group Size specified: %i\n", blockSizeX * blockSizeY);
-//        printf("Max Group Size supported on the kernel: %i\n", kernelWorkGroupSize);
-//        printf("Falling back to %i.\n", kernelWorkGroupSize);
-//
-//        if (blockSizeX > kernelWorkGroupSize)
-//        {
-//            blockSizeX = kernelWorkGroupSize;
-//            blockSizeY = 1;
-//            return EXIT_FAILURE;
-//        }
-//    }
-//    return EXIT_SUCCESS;
-//}
-
 /**
  * This function runs kernels for k-means algorithm
  *
@@ -844,7 +814,7 @@ int runMeanShiftKernels()
 
     /* local memory */
     uint cache_size = (msWinSize) * (msWinSize);
-    status = clSetKernelArg(edgeXKernel,
+    status = clSetKernelArg(meanshiftKernel,
                             3,
                             sizeof (cl_float) * cache_size,
                             0);
@@ -875,7 +845,7 @@ int runMeanShiftKernels()
 
     /* max length */
     status = clSetKernelArg(meanshiftKernel,
-                            6,
+                            7,
                             sizeof (cl_float),
                             &msMaxLength);
 
@@ -884,17 +854,18 @@ int runMeanShiftKernels()
     //the global number of threads in each dimension has to be divisible
     // by the local dimension numbers
     size_t globalThreadsMeanshift[] = {
-        blockSizeX,
+        width,
         height
     };
-    size_t localThreadsMeanshift[] = {blockSizeX, 1};
+    size_t localThreadsMeanshift[] = {width, 1};
 
     status = clEnqueueNDRangeKernel(commandQueue, //TODO is this correct???
                                     meanshiftKernel,
                                     2,
                                     NULL, //offset
                                     globalThreadsMeanshift,
-                                    localThreadsMeanshift,
+                                    //localThreadsMeanshift,
+                                    NULL,
                                     0,
                                     NULL,
                                     &event_meanshift);
@@ -949,22 +920,29 @@ int runMeanShiftKernels()
 
     //the global number of threads in each dimension has to be divisible
     // by the local dimension numbers
-    size_t globalThreadsResult[] = {
-        ((width + blockSizeX - 1) / blockSizeX) * blockSizeX,
-        ((height + blockSizeY - 1) / blockSizeY) * blockSizeY
-    };
-    size_t localThreadsResult[] = {blockSizeX, blockSizeY};
+    //size_t globalThreadsResult[] = {
+    //    ((width + blockSizeX - 1) / blockSizeX) * blockSizeX,
+    //    ((height + blockSizeY - 1) / blockSizeY) * blockSizeY
+    //};
+
+    //size_t localThreadsResult[] = {blockSizeX, blockSizeY};
 
     cl_event wait_events[] = {event_meanshift};
 
+    size_t globalThreadsResult[] = {
+        width,
+        height
+    };
+    //size_t localThreadsResult[] = {width, 1};
 
     status = clEnqueueNDRangeKernel(commandQueue, //TODO is this correct????
                                     meanshiftResultKernel,
                                     2,
                                     NULL, //offset
                                     globalThreadsResult,
-                                    localThreadsResult,
-                                    2,
+                                    //localThreadsResult,
+                                    NULL,
+                                    1,
                                     wait_events,
                                     &event_result);
 

@@ -29,13 +29,14 @@ int oldy = y;
 
 //cycle control value
 bool cont = true;
-
+int iter = 0;
 //mean structures
 float denominatorX = 0;
 float numeratorX = 0;
 float denominatorY = 0;
 float numeratorY = 0;
 float fNumerator;
+
 
 //begincycle - until the step is bigger than relevant
 do {
@@ -60,12 +61,12 @@ do {
                 //compute lengths for [wx,wy] - [x,y]
                 //if the length is bigger the maxlength, set 0 there
                 //otherwise set the length
-                float length = 1 - 1/sqrt(
+                float length = 1 - 1/sqrt(convert_float(
                     (actx-wx)*(actx-wx) +
                     (acty-wy)*(acty-wy) +
                     (input[actx + acty*width].s0 - input[wx + wy*width].s0)*(input[actx + acty*width].s0 - input[wx + wy*width].s0) +
                     (input[actx + acty*width].s1 - input[wx + wy*width].s1)*(input[actx + acty*width].s1 - input[wx + wy*width].s1) +
-                    (input[actx + acty*width].s2 - input[wx + wy*width].s2)*(input[actx + acty*width].s2 - input[wx + wy*width].s2));
+                    (input[actx + acty*width].s2 - input[wx + wy*width].s2)*(input[actx + acty*width].s2 - input[wx + wy*width].s2)));
                 if (length > maxlength)
                 {
                     cache[wx - wxmin + (wy-wymin)*winsize] = convert_float(0);
@@ -76,12 +77,12 @@ do {
                     cache[wx - wxmin + (wy-wymin)*winsize] = convert_float(1-length);
 
                     //add numerator and denominator for the X mean computation
-                    fNumerator = sqrt((wx-actx)*(wx-actx));
+                    fNumerator = sqrt(convert_float((wx-actx)*(wx-actx)));
                     numeratorX += fNumerator * (1-length);
                     denominatorX += fNumerator;
 
                     //add numerator and denominator for the Y mean computation
-                    fNumerator = sqrt((wy-acty)*(wy-acty));
+                    fNumerator = sqrt(convert_float((wy-acty)*(wy-acty)));
                     numeratorY += fNumerator * (1-length);
                     denominatorY += fNumerator;
                 }
@@ -99,20 +100,21 @@ do {
     wxmax = actx + ((winsize-1) / 2) + 1;
     wxmin = actx - ((winsize-1) / 2);
 
-    if (actx == oldx && acty == oldy)
+    /*if (actx == oldx && acty == oldy)
     {
         //the step is lower the 0.5pix
         cont = false;
-    }
+    }*/
 
     //endcycle
-} while (cont);
+    iter++;
+} while (cont && iter < 50);
 
 //store the peak position to peaks array
 peaks[x+y*width] = actx + acty*width;
 
 //increment value on peak position in counts array
-counts[actx + acty*width] = counts[actx + acty*width] + 1;
+counts[actx + acty*width] = 1;//counts[actx + acty*width] + 1;
 
 }
 
@@ -124,9 +126,13 @@ __kernel void mean_shift_result(__global uint* counts, __global uint* peaks, __g
 	if(x < width && y < height)
 	{
 		int gid = x + y*width;
-		output[gid] = add_sat(sobel_x[gid], sobel_y[gid]);
-		output[gid].s3 = 255;
-	}
+		//output[gid] = add_sat(sobel_x[gid], sobel_y[gid]);
+        output[gid].s0 = 255-peaks[gid];
+        output[gid].s1 = 255-peaks[gid];
+        output[gid].s2 = 255-peaks[gid];
+
+        output[gid].s3 = 255;
+    }
 }
 
 //TODO delete following
