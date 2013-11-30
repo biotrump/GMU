@@ -15,7 +15,11 @@ Rozsah: cca 10 odrážek
 
 %---------------------------------------------------------------------------
 \section{Použité technologie}
-
+\begin{itemize}
+  \item knihovna OpenCL
+  \item knihovna SDL (práce s okny a obrázky)
+  \item knihovna OpenCV  
+\end{itemize}
 Zde vypište, jaké technologie vaše řešení používá – co potřebuje k běhu, co
 jste použili při tvorbě, atd. Text strukturujte, použijte odrážky,
 číslování$\ldots$
@@ -24,7 +28,10 @@ Rozsah: cca 7 odrážek
 
 %---------------------------------------------------------------------------
 \section{Použité zdroje}
-
+\begin{itemize}
+  \item kostra programu, obrázky a soubory z 2. cvičení GMU
+  \item k-means clustering [http://en.wikipedia.org/wiki/K-means\_clustering]
+\end{itemize}
 Zde vypište, které zdroje jste použili k tvorbě: hotový kód, hotová data
 (obrázky, modely, $\ldots$), studijní materiály. Pokud vyplyne, že v projektu
 je použit kód nebo data, která nejsou uvedena tady, jedná se o závažný problém
@@ -40,7 +47,16 @@ komentujte obrázky, v nejhorším případě vypište textově.
 
 %---------------------------------------------------------------------------
 \section{Ovládání vytvořeného programu}
-
+\begin{itemize}
+  \item zpracování metodou k-means 
+    \begin{itemize}
+      \item[] {\tt ./gmu km}
+    \end{itemize}
+  \item zpracování metodou mean-shift
+    \begin{itemize}
+      \item[] {\tt ./gmu ms}
+    \end{itemize}
+\end{itemize}
 Stručně popište, jak se program ovládá (nejlépe odrážky rozdělené do
 kategorií). Pokud se ovládání odchyluje od zkratek a způsobů obvykle
 používaných v okýnkových nadstavbách operačních systémů, zdůvodněte, proč se
