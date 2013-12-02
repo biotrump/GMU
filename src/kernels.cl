@@ -265,6 +265,12 @@ if (peakcount[0] == -1)
     }
     printf("pocet vrcholu: %d\n", peakcount[0]);
     //TODO rozlozim barvy a vytvorim mapovaci funkci
+    int colorStep = convert_int_rte((256*256*256)/peakcount[0]);
+
+    for (int n =0; n<peakcount[0]; n++)
+    {
+        colors[uniquepeaks[n]] = (n*colorStep);
+    }
 
     printf("[%d,%d] critic section - end\n",x,y);
 }
@@ -277,160 +283,10 @@ barrier(CLK_GLOBAL_MEM_FENCE);
 //output[gid].s0 = 255-peaks[gid];
 //output[gid].s1 = 255-peaks[gid];
 //output[gid].s2 = 255-peaks[gid];
-printf("%d\n",counts[gid]);
-output[gid] = peak;
+//printf("[%d,%d,%d]\n",colors[gid].s0,colors[gid].s1,colors[gid].s2);
+output[gid] = colors[peak];
 
 output[gid].s3 = 255;
 }
 
 
-__kernel void mean_shift_begin(__global uchar4* input, __global uint* peaks, __global uint* counts,
-__local float* cache, uint width, uint height, uint winsize, float maxlength)
-{
-int x = get_global_id(0);
-int y = get_global_id(1);
-
-
-//reconstruct window by given param
-float actx = convert_float(x);
-float acty = convert_float(y);
-int wymax = acty + ((winsize-1) / 2) + 1;
-int wymin = acty - ((winsize-1) / 2);
-int wxmax = actx + ((winsize-1) / 2) + 1;
-int wxmin = actx - ((winsize-1) / 2);
-
-float oldx = convert_float(x);
-float oldy = convert_float(y);
-
-//cycle control value
-bool cont = true;
-int iter = 0;
-//mean structures
-float newX, newY;
-
-//begincycle - until the step is bigger than relevant
-do {
-    newX = newY = 0;
-    for (int wy = wymin; wy < wymax; wy++)
-    {
-        for (int wx = wxmin; wx < wxmax; wx++)
-        {
-            if (wx < 0 || wy < 0 || wx > width-1|| wy > height-1)
-            {
-                //out of original window
-                //set 0 to the position of the x in local cache
-                continue;
-            }
-            else if (wx == convert_int(actx) && wy == convert_int(acty))
-            {
-                //set 1 to the position of the x
-                //to [actx-wxmin,acty-wymin] set 1
-
-                newX += (wx - actx);
-                newY += (wy - acty);
-            }
-            else
-            {
-                //compute lengths for [wx,wy] - [x,y]
-                //if the length is bigger the maxlength, set 0 there
-                //otherwise set the length
-                int gid = convert_int_rte(actx) + convert_int_rte(acty)*width;
-                float length = 1/sqrt(convert_float(
-                    (actx-wx)*(actx-wx) +
-                    (acty-wy)*(acty-wy) +
-                    (input[gid].s0 - input[wx + wy*width].s0)*(input[gid].s0 - input[wx + wy*width].s0) +
-                    (input[gid].s1 - input[wx + wy*width].s1)*(input[gid].s1 - input[wx + wy*width].s1) +
-                    (input[gid].s2 - input[wx + wy*width].s2)*(input[gid].s2 - input[wx + wy*width].s2)));
-
-                newX += (wx - actx) * length;
-                newY += (wy - acty) * length;
-            }
-        }
-    }
-//printf("[%d:%d]- old:[%f,%f], new diff:[%f,%f]\n", x,y,actx,acty,newX,newY);
-    //recompute mean of the window
-    oldx = actx;
-    oldy = acty;
-
-    actx = actx + newX;
-    acty = acty + newY;
-
-
-
-    //shift the window to the mean be in the center
-    wymax = convert_int_rte(acty) + ((winsize-1) / 2) + 1;
-    wymin = convert_int_rte(acty) - ((winsize-1) / 2);
-    wxmax = convert_int_rte(actx) + ((winsize-1) / 2) + 1;
-    wxmin = convert_int_rte(actx) - ((winsize-1) / 2);
-
-    if((newX < 0 ? -1*newX : newX) <= 0.2 && (newY < 0 ? -1*newY : newY) <= 0.2)
-    {
-        //the step is lower the 0.5pix
-        cont = false;
-    }
-
-
-    //endcycle
-    iter++;
-} while (cont);
-
-actx = convert_float(max(convert_int_rte(actx),0));
-acty = convert_float(max(convert_int_rte(acty),0));
-
-actx = convert_float(min(convert_int_rte(actx),convert_int_rte(width)-1));
-acty = convert_float(min(convert_int_rte(acty),convert_int_rte(height)-1));
-
-//printf("[%d,%d]/%d reached: [%d, %d]\n",x,y,iter,convert_int_rte(actx),convert_int_rte(acty));
-
-//store the peak position to peaks array
-peaks[x+y*width] = convert_int_rte(actx) + convert_int_rte(acty)*width;
-
-//increment value on peak position in counts array
-counts[convert_int_rte(actx) + convert_int_rte(acty)*width] = counts[convert_int_rte(actx) + convert_int_rte(acty)*width] + 1;
-
-}
-
-__kernel void mean_shift_peaks(__global uint* peaks, uint width, uint height)
-{
-    int x = get_global_id(0);
-	int y = get_global_id(1);
-
-//    if (x < 0 || y < 0 || x >= width || y >= height)
-//    {
-//        return;
-//    }
-
-    printf("[%d,%d]\n",x,y);
-
-    int gid = x + width*y;
-    int peak = peaks[gid];
-    int i = 0;
-
-    while (peaks[peaks[peak]] != peaks[peak] && i < 10)
-    {
-        i++;
-        peaks[gid] = peaks[peak];
-        peak = peaks[peaks[peak]];
-    }
-}
-
-__kernel void mean_shift_result(__global uint* counts, __global uint* peaks, __global uchar4* output, uint width, uint height)
-{
-	int x = get_global_id(0);
-	int y = get_global_id(1);
-
-	if(x < width && y < height)
-	{
-		int gid = x + y*width;
-//printf(peaks[gid]);
-		//output[gid] = add_sat(sobel_x[gid], sobel_y[gid]);
-        //if(peaks[gid] != 0)
-        //    output[gid].s0 = 255;
-        //else
-        output[gid].s0 = 255-peaks[gid];
-        output[gid].s1 = 255-peaks[gid];
-        output[gid].s2 = 255-peaks[gid];
-
-        output[gid].s3 = 255;
-    }
-}
