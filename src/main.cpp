@@ -38,8 +38,8 @@ cl_uint pixelSize = 32; //rgba 8bits per channel
 cl_context context;
 cl_command_queue commandQueue;
 cl_kernel kmeans;
-cl_kernel meanshiftKernel, meanshiftPeaksKernel, meanshiftResultKernel;
-cl_kernel msKernel, msResult;
+cl_kernel meanshiftBeginKernel, meanshiftPeaksKernel, meanshiftResultKernel, meanshift;
+//scl_kernel msKernel, msResult;
 cl_program program;
 
 
@@ -48,14 +48,15 @@ cl_mem d_inputImageBuffer = NULL;
 cl_mem d_outputImageBuffer = NULL;
 
 /* k-means memory buffers */
-//cl_mem d_edgeXImageBuffer = NULL;
-//cl_mem d_edgeYImageBuffer = NULL;
 cl_mem d_pixels = NULL;
 cl_mem d_centroids = NULL;
 
 /* mean-shift memory buffers */
 cl_mem d_countsBuffer = NULL;
 cl_mem d_peaksBuffer = NULL;
+cl_mem d_colors = NULL;
+cl_mem d_peakCount = NULL;
+cl_mem d_uniquePeaks = NULL;
 
 
 //the size of our blocks
@@ -74,15 +75,16 @@ int msWinSize = 5;
 float msMaxLength = 10.0f;
 
 // nahodne zvoleni K stredu
+
 void generateCenters(int K, cl_uchar4* centers)
 {
-	for (int i = 0; i < K; i++)
-	{		
-		centers->s[0] = rand() % 256;
-		centers->s[1] = rand() % 256;
-		centers->s[2] = rand() % 256;
-		centers->s[3] = 255;
-	}
+    for (int i = 0; i < K; i++)
+    {
+        centers->s[0] = rand() % 256;
+        centers->s[1] = rand() % 256;
+        centers->s[2] = rand() % 256;
+        centers->s[3] = 255;
+    }
 }
 
 int printTiming(cl_event event, const char* title)
@@ -374,7 +376,7 @@ int setupCL()
                                          &ciErr);
     CheckOpenCLError(ciErr, "Allocate output buffer");
 
-	ciErr = clEnqueueWriteBuffer(commandQueue,
+    ciErr = clEnqueueWriteBuffer(commandQueue,
                                  d_outputImageBuffer,
                                  CL_TRUE, //blocking write
                                  0,
@@ -405,37 +407,73 @@ int setupCL()
                                      0, &ciErr);
         CheckOpenCLError(ciErr, "CreateBuffer centroids (k-means)");
 
-		// nahodne vybrani K stredu a zkopirovani do bufferu
-		cl_uchar4 *centers = new cl_uchar4[K];
-		generateCenters(K, centers);
-		ciErr = clEnqueueWriteBuffer(commandQueue,
-                                 d_centroids,
-                                 CL_TRUE, //blocking write
-                                 0,
-                                 K * sizeof (cl_uchar4),
-                                 centers,
-                                 0,
-                                 0,
-                                 0);
+        // nahodne vybrani K stredu a zkopirovani do bufferu
+        cl_uchar4 *centers = new cl_uchar4[K];
+        generateCenters(K, centers);
+        ciErr = clEnqueueWriteBuffer(commandQueue,
+                                     d_centroids,
+                                     CL_TRUE, //blocking write
+                                     0,
+                                     K * sizeof (cl_uchar4),
+                                     centers,
+                                     0,
+                                     0,
+                                     0);
 
-		CheckOpenCLError(ciErr, "Copy centroids buffer data (k-means)");
-		delete centers;
+        CheckOpenCLError(ciErr, "Copy centroids buffer data (k-means)");
+        delete centers;
     }
     else
     {
         /* Mean-shift section */
         /* Set all mid buffers needed by mean-shift here */
         d_peaksBuffer = clCreateBuffer(context,
-                                            CL_MEM_READ_WRITE,
+                                       CL_MEM_READ_WRITE,
                                        width * height * sizeof (cl_uint),
-                                            0, &ciErr);
+                                       0,
+                                       &ciErr);
         CheckOpenCLError(ciErr, "CreateBuffer peaks (mean-shift)");
 
         d_countsBuffer = clCreateBuffer(context,
-                                            CL_MEM_READ_WRITE,
+                                        CL_MEM_READ_WRITE,
                                         width * height * sizeof (cl_uint),
-                                            0, &ciErr);
+                                        0,
+                                        &ciErr);
         CheckOpenCLError(ciErr, "CreateBuffer counts (mean-shift)");
+
+        d_peakCount = clCreateBuffer(context,
+                                     CL_MEM_READ_WRITE,
+                                     sizeof (cl_uint),
+                                     0,
+                                     &ciErr);
+        CheckOpenCLError(ciErr, "CreateBuffer peakCounts (mean-shift)");
+
+        cl_uint peakCount = -1;
+        ciErr = clEnqueueWriteBuffer(commandQueue,
+                                     d_peakCount,
+                                     CL_TRUE, //blocking write
+                                     0,
+                                     sizeof (cl_uint),
+                                     &peakCount,
+                                     0,
+                                     0,
+                                     0);
+
+        CheckOpenCLError(ciErr, "Copy centroids buffer data (k-means)");
+
+        d_uniquePeaks = clCreateBuffer(context,
+                                       CL_MEM_READ_WRITE,
+                                       width * height * sizeof (cl_uint),
+                                       0,
+                                       &ciErr);
+        CheckOpenCLError(ciErr, "CreateBuffer uniquePeaks (mean-shift)");
+
+        d_colors = clCreateBuffer(context,
+                                  CL_MEM_READ_WRITE,
+                                  width * height * sizeof (cl_uchar4),
+                                  0,
+                                  &ciErr);
+        CheckOpenCLError(ciErr, "CreateBuffer colors (mean-shift)");
     }
 
 
@@ -498,7 +536,7 @@ int setupCL()
         /* ================================================================== */
 
         // kernels - create kernels
-		kmeans = clCreateKernel(program, "kmeans", &ciErr);
+        kmeans = clCreateKernel(program, "kmeans", &ciErr);
         CheckOpenCLError(ciErr, "clCreateKernel kmeans");
         //edgeXKernel = clCreateKernel(program, "edge_x", &ciErr);
         //CheckOpenCLError(ciErr, "clCreateKernel edge_x");
@@ -540,16 +578,17 @@ int setupCL()
         /* ================================================================== */
 
         // kernels - create kernels
-        meanshiftKernel = clCreateKernel(program, "mean_shift", &ciErr);
-        CheckOpenCLError(ciErr, "clCreateKernel mean_shift");
-        meanshiftResultKernel = clCreateKernel(program, "mean_shift_result", &ciErr);
-        CheckOpenCLError(ciErr, "clCreateKernel mean_shift_result");
-        meanshiftPeaksKernel = clCreateKernel(program, "mean_shift_peaks", &ciErr);
-        CheckOpenCLError(ciErr, "clCreateKernel mean_shift_peaks");
-
+        meanshift = clCreateKernel(program, "meanshift", &ciErr);
+        CheckOpenCLError(ciErr, "clCreateKernel meanshift");
+        //meanshiftBeginKernel = clCreateKernel(program, "mean_shift_begin", &ciErr);
+        //CheckOpenCLError(ciErr, "clCreateKernel mean_shift_begin");
+        //meanshiftResultKernel = clCreateKernel(program, "mean_shift_result", &ciErr);
+        //CheckOpenCLError(ciErr, "clCreateKernel mean_shift_result");
+        //meanshiftPeaksKernel = clCreateKernel(program, "mean_shift_peaks", &ciErr);
+        //CheckOpenCLError(ciErr, "clCreateKernel mean_shift_peaks");
 
         // Check group size against group size returned by kernel
-        ciErr = clGetKernelWorkGroupInfo(meanshiftResultKernel,
+        ciErr = clGetKernelWorkGroupInfo(meanshift,
                                          cdDevices[deviceIndex],
                                          CL_KERNEL_WORK_GROUP_SIZE,
                                          sizeof (size_t),
@@ -558,23 +597,34 @@ int setupCL()
         CheckOpenCLError(ciErr, "clGetKernelInfo");
         kernelWorkGroupSize = MIN(tempKernelWorkGroupSize, kernelWorkGroupSize);
 
-        ciErr = clGetKernelWorkGroupInfo(meanshiftKernel,
-                                         cdDevices[deviceIndex],
-                                         CL_KERNEL_WORK_GROUP_SIZE,
-                                         sizeof (size_t),
-                                         &tempKernelWorkGroupSize,
-                                         0);
-        CheckOpenCLError(ciErr, "clGetKernelInfo");
-        kernelWorkGroupSize = MIN(tempKernelWorkGroupSize, kernelWorkGroupSize);
 
-        ciErr = clGetKernelWorkGroupInfo(meanshiftPeaksKernel,
-                                         cdDevices[deviceIndex],
-                                         CL_KERNEL_WORK_GROUP_SIZE,
-                                         sizeof (size_t),
-                                         &tempKernelWorkGroupSize,
-                                         0);
-        CheckOpenCLError(ciErr, "clGetKernelInfo");
-        kernelWorkGroupSize = MIN(tempKernelWorkGroupSize, kernelWorkGroupSize);
+        //        // Check group size against group size returned by kernel
+        //        ciErr = clGetKernelWorkGroupInfo(meanshiftResultKernel,
+        //                                         cdDevices[deviceIndex],
+        //                                         CL_KERNEL_WORK_GROUP_SIZE,
+        //                                         sizeof (size_t),
+        //                                         &tempKernelWorkGroupSize,
+        //                                         0);
+        //        CheckOpenCLError(ciErr, "clGetKernelInfo");
+        //        kernelWorkGroupSize = MIN(tempKernelWorkGroupSize, kernelWorkGroupSize);
+        //
+        //        ciErr = clGetKernelWorkGroupInfo(meanshiftBeginKernel,
+        //                                         cdDevices[deviceIndex],
+        //                                         CL_KERNEL_WORK_GROUP_SIZE,
+        //                                         sizeof (size_t),
+        //                                         &tempKernelWorkGroupSize,
+        //                                         0);
+        //        CheckOpenCLError(ciErr, "clGetKernelInfo");
+        //        kernelWorkGroupSize = MIN(tempKernelWorkGroupSize, kernelWorkGroupSize);
+        //
+        //        ciErr = clGetKernelWorkGroupInfo(meanshiftPeaksKernel,
+        //                                         cdDevices[deviceIndex],
+        //                                         CL_KERNEL_WORK_GROUP_SIZE,
+        //                                         sizeof (size_t),
+        //                                         &tempKernelWorkGroupSize,
+        //                                         0);
+        //        CheckOpenCLError(ciErr, "clGetKernelInfo");
+        //        kernelWorkGroupSize = MIN(tempKernelWorkGroupSize, kernelWorkGroupSize);
     }
 
 
@@ -613,17 +663,17 @@ int runKMeansKernels()
     // Kernel kmeans
 
     /* input buffer */
-	status = clSetKernelArg(kmeans,
+    status = clSetKernelArg(kmeans,
                             0,
                             sizeof (cl_mem),
                             &d_inputImageBuffer);
     CheckOpenCLError(status, "clSetKernelArg. (inputImage)");
 
-	/* output buffer */
-	status = clSetKernelArg(kmeans,
+    /* output buffer */
+    status = clSetKernelArg(kmeans,
                             1,
                             sizeof (cl_mem),
-							&d_outputImageBuffer);
+                            &d_outputImageBuffer);
     CheckOpenCLError(status, "clSetKernelArg. (uotputImage)");
 
     /* buffer centroidu */
@@ -649,7 +699,7 @@ int runKMeansKernels()
 
     CheckOpenCLError(status, "clSetKernelArg. (width)");
 
-	/* image height */
+    /* image height */
     status = clSetKernelArg(kmeans,
                             5,
                             sizeof (cl_uint),
@@ -657,7 +707,7 @@ int runKMeansKernels()
 
     CheckOpenCLError(status, "clSetKernelArg. (height)");
 
-	/* K */
+    /* K */
     status = clSetKernelArg(kmeans,
                             6,
                             sizeof (cl_uint),
@@ -676,11 +726,11 @@ int runKMeansKernels()
 
     //the global number of threads in each dimension has to be divisible
     // by the local dimension numbers
-    size_t globalThreadsPixels[] ={
+    size_t globalThreadsPixels[] = {
         /*width, */blockSizeX,
         height
     };
-    size_t localThreadsPixels[] = { /*width, */blockSizeX, 1};
+    size_t localThreadsPixels[] = {/*width, */blockSizeX, 1};
 
     status = clEnqueueNDRangeKernel(commandQueue,
                                     kmeans,
@@ -725,222 +775,313 @@ int runKMeansKernels()
 int runMeanShiftKernels()
 {
     int status;
-    cl_event event_result, event_meanshift, event_peaks;
+    //cl_event event_result, event_meanshift, event_peaks;
+    cl_event event_meanshift;
 
     /* Setup arguments to the kernel */
 
-    //////////////////////////////////////////////////////////////////////////////////////////////////
-    // mean-shift
-
     /* input buffer */
-    status = clSetKernelArg(meanshiftKernel,
+    status = clSetKernelArg(meanshift,
                             0,
                             sizeof (cl_mem),
                             &d_inputImageBuffer);
     CheckOpenCLError(status, "clSetKernelArg. (inputImage)");
 
-    /* peaks buffer */
-    status = clSetKernelArg(meanshiftKernel,
+    /* output buffer */
+    status = clSetKernelArg(meanshift,
                             1,
                             sizeof (cl_mem),
-                            &d_peaksBuffer);
+                            &d_outputImageBuffer);
+    CheckOpenCLError(status, "clSetKernelArg. (outputImage)");
 
+    /* peaks buffer */
+    status = clSetKernelArg(meanshift,
+                            2,
+                            sizeof (cl_mem),
+                            &d_peaksBuffer);
     CheckOpenCLError(status, "clSetKernelArg. (peaksBuffer)");
 
     /* counts buffer */
-    status = clSetKernelArg(meanshiftKernel,
-                            2,
+    status = clSetKernelArg(meanshift,
+                            3,
                             sizeof (cl_mem),
                             &d_countsBuffer);
-
     CheckOpenCLError(status, "clSetKernelArg. (countsBuffer)");
 
-    /* local memory */
-    unsigned int cache_size = (msWinSize) * (msWinSize);
-    status = clSetKernelArg(meanshiftKernel,
-                            3,
-                            sizeof (cl_float) * cache_size,
-                            0);
-
     /* image width */
-    status = clSetKernelArg(meanshiftKernel,
+    status = clSetKernelArg(meanshift,
                             4,
                             sizeof (cl_uint),
                             &width);
-
     CheckOpenCLError(status, "clSetKernelArg. (width)");
 
     /* image height */
-    status = clSetKernelArg(meanshiftKernel,
+    status = clSetKernelArg(meanshift,
                             5,
                             sizeof (cl_uint),
                             &height);
-
     CheckOpenCLError(status, "clSetKernelArg. (height)");
 
     /* window size */
-    status = clSetKernelArg(meanshiftKernel,
+    status = clSetKernelArg(meanshift,
                             6,
                             sizeof (cl_uint),
                             &msWinSize);
-
     CheckOpenCLError(status, "clSetKernelArg. (msWinSize)");
 
-    /* max length */
-    status = clSetKernelArg(meanshiftKernel,
+    /* peakCount buffer */
+
+    status = clSetKernelArg(meanshift,
                             7,
-                            sizeof (cl_float),
-                            &msMaxLength);
+                            sizeof (cl_mem),
+                            &d_peakCount);
+    CheckOpenCLError(status, "clSetKernelArg. (peakCount)");
 
-    CheckOpenCLError(status, "clSetKernelArg. (maxlength)");
+    /* uniquePeaks buffer */
+    status = clSetKernelArg(meanshift,
+                            8,
+                            sizeof (cl_mem),
+                            &d_uniquePeaks);
+    CheckOpenCLError(status, "clSetKernelArg. (uniquePeaks)");
 
-    //the global number of threads in each dimension has to be divisible
-    // by the local dimension numbers
-    size_t globalThreadsMeanshift[] = {
-        width,
-        height
-    };
-    //size_t localThreadsMeanshift[] = {width, 1};
+    /* colors buffer */
+    status = clSetKernelArg(meanshift,
+                            9,
+                            sizeof (cl_mem),
+                            &d_colors);
+    CheckOpenCLError(status, "clSetKernelArg. (colors)");
 
+    /* Kernel enqueue*/
+    size_t globalThreadsMeanshift[] = {width, height};
+    size_t localThreadsMeanshift[] = {width, 1};
+
+    cout << "DBG: meanshiftKernel begins" << endl;
     status = clEnqueueNDRangeKernel(commandQueue, //TODO is this correct???
-                                    meanshiftKernel,
+                                    meanshift,
                                     2,
                                     NULL, //offset
                                     globalThreadsMeanshift,
-                                    //localThreadsMeanshift,
-                                    NULL,
+                                    localThreadsMeanshift,
                                     0,
                                     NULL,
                                     &event_meanshift);
 
     CheckOpenCLError(status, "clEnqueueNDRangeKernel meanshift.");
-
+    cout << "DBG: meanshiftKernel ends" << endl;
 
     status = clWaitForEvents(1, &event_meanshift);
     CheckOpenCLError(status, "clWaitForEvents meanshift.");
-    cout << "test" << endl;
-
-    //////////////////////////////////////////////////////////////////////////////////////////////////
-    // PEAKS KERNEL
-    /* input buffer peaks*/
-    status = clSetKernelArg(meanshiftPeaksKernel,
-                            0,
-                            sizeof (cl_mem),
-                            &d_peaksBuffer);
-    CheckOpenCLError(status, "clSetKernelArg. (peaksBuffer)");
-
-    /* image width */
-    status = clSetKernelArg(meanshiftPeaksKernel,
-                            1,
-                            sizeof (cl_uint),
-                            &width);
-
-    CheckOpenCLError(status, "clSetKernelArg. (width)");
-
-    /* image height */
-    status = clSetKernelArg(meanshiftPeaksKernel,
-                            2,
-                            sizeof (cl_uint),
-                            &height);
-
-    CheckOpenCLError(status, "clSetKernelArg. (height)");
-
-    cl_event wait_events[] = {event_meanshift};
-
-
-
-    status = clEnqueueNDRangeKernel(commandQueue,
-                                    meanshiftPeaksKernel,
-                                    2,
-                                    NULL, //offset
-                                    globalThreadsMeanshift,
-                                    //localThreadsMeanshift,
-                                    NULL,
-                                    1,
-                                    wait_events,
-                                    &event_peaks);
-
-    status = clWaitForEvents(1, &event_peaks);
-    CheckOpenCLError(status, "clWaitForEvents peaks boost.");
-
-    //////////////////////////////////////////////////////////////////////////////////////////////////
-    // RESULT KERNEL
-    /* input buffer X*/
-    status = clSetKernelArg(meanshiftResultKernel,
-                            0,
-                            sizeof (cl_mem),
-                            &d_countsBuffer);
-    CheckOpenCLError(status, "clSetKernelArg. (countsBuffer)");
-
-
-    /* input buffer Y*/
-    status = clSetKernelArg(meanshiftResultKernel,
-                            1,
-                            sizeof (cl_mem),
-                            &d_peaksBuffer);
-    CheckOpenCLError(status, "clSetKernelArg. (peaksBuffer)");
-
-    /* output buffer */
-    status = clSetKernelArg(meanshiftResultKernel,
-                            2,
-                            sizeof (cl_mem),
-                            &d_outputImageBuffer);
-
-    CheckOpenCLError(status, "clSetKernelArg. (outputImage)");
-
-    /* image width */
-    status = clSetKernelArg(meanshiftResultKernel,
-                            3,
-                            sizeof (cl_uint),
-                            &width);
-
-    CheckOpenCLError(status, "clSetKernelArg. (width)");
-
-    /* image height */
-    status = clSetKernelArg(meanshiftResultKernel,
-                            4,
-                            sizeof (cl_uint),
-                            &height);
-
-    CheckOpenCLError(status, "clSetKernelArg. (height)");
-
-
-    //the global number of threads in each dimension has to be divisible
-    // by the local dimension numbers
-    //size_t globalThreadsResult[] = {
-    //    ((width + blockSizeX - 1) / blockSizeX) * blockSizeX,
-    //    ((height + blockSizeY - 1) / blockSizeY) * blockSizeY
-    //};
-
-    //size_t localThreadsResult[] = {blockSizeX, blockSizeY};
-
-    cl_event wait_events_res[] = {event_peaks};
-
-    size_t globalThreadsResult[] = {
-        width,
-        height
-    };
-    //size_t localThreadsResult[] = {width, 1};
-
-    status = clEnqueueNDRangeKernel(commandQueue,
-                                    meanshiftResultKernel,
-                                    2,
-                                    NULL, //offset
-                                    globalThreadsResult,
-                                    //localThreadsResult,
-                                    NULL,
-                                    1,
-                                    wait_events_res,
-                                    &event_result);
-
-    CheckOpenCLError(status, "clEnqueueNDRangeKernel.");
-
-    status = clWaitForEvents(1, &event_result);
-    CheckOpenCLError(status, "clWaitForEvents.");
 
     printTiming(event_meanshift, "Mean-shift: ");
-    printTiming(event_peaks, "Mean-shift Peaks: ");
-    printTiming(event_result, "Mean-shift Result: ");
+
+    //////////////////////////////////////////////////////////////////////////////////////////////////
+    // mean-shift
+
+    //    /* input buffer */
+    //    status = clSetKernelArg(meanshiftBeginKernel,
+    //                            0,
+    //                            sizeof (cl_mem),
+    //                            &d_inputImageBuffer);
+    //    CheckOpenCLError(status, "clSetKernelArg. (inputImage)");
+    //
+    //    /* peaks buffer */
+    //    status = clSetKernelArg(meanshiftBeginKernel,
+    //                            1,
+    //                            sizeof (cl_mem),
+    //                            &d_peaksBuffer);
+    //
+    //    CheckOpenCLError(status, "clSetKernelArg. (peaksBuffer)");
+    //
+    //    /* counts buffer */
+    //    status = clSetKernelArg(meanshiftBeginKernel,
+    //                            2,
+    //                            sizeof (cl_mem),
+    //                            &d_countsBuffer);
+    //
+    //    CheckOpenCLError(status, "clSetKernelArg. (countsBuffer)");
+    //
+    //    /* local memory */
+    //    unsigned int cache_size = (msWinSize) * (msWinSize);
+    //    status = clSetKernelArg(meanshiftBeginKernel,
+    //                            3,
+    //                            sizeof (cl_float) * cache_size,
+    //                            0);
+    //
+    //    /* image width */
+    //    status = clSetKernelArg(meanshiftBeginKernel,
+    //                            4,
+    //                            sizeof (cl_uint),
+    //                            &width);
+    //
+    //    CheckOpenCLError(status, "clSetKernelArg. (width)");
+    //
+    //    /* image height */
+    //    status = clSetKernelArg(meanshiftBeginKernel,
+    //                            5,
+    //                            sizeof (cl_uint),
+    //                            &height);
+    //
+    //    CheckOpenCLError(status, "clSetKernelArg. (height)");
+    //
+    //    /* window size */
+    //    status = clSetKernelArg(meanshiftBeginKernel,
+    //                            6,
+    //                            sizeof (cl_uint),
+    //                            &msWinSize);
+    //
+    //    CheckOpenCLError(status, "clSetKernelArg. (msWinSize)");
+    //
+    //    /* max length */
+    //    status = clSetKernelArg(meanshiftBeginKernel,
+    //                            7,
+    //                            sizeof (cl_float),
+    //                            &msMaxLength);
+    //
+    //    CheckOpenCLError(status, "clSetKernelArg. (maxlength)");
+    //
+    //    //the global number of threads in each dimension has to be divisible
+    //    // by the local dimension numbers
+    //    size_t globalThreadsMeanshift[] = {
+    //        width,
+    //        height
+    //    };
+    //    size_t localThreadsMeanshift[] = {width, 1};
+    //
+    //    cout << "DBG: meanshiftKernel begins" << endl;
+    //    status = clEnqueueNDRangeKernel(commandQueue, //TODO is this correct???
+    //                                    meanshiftBeginKernel,
+    //                                    2,
+    //                                    NULL, //offset
+    //                                    globalThreadsMeanshift,
+    //                                    localThreadsMeanshift,
+    //                                    0,
+    //                                    NULL,
+    //                                    &event_meanshift);
+    //
+    //    CheckOpenCLError(status, "clEnqueueNDRangeKernel meanshift.");
+    //    cout << "DBG: meanshiftKernel ends" << endl;
+    //
+    //    status = clWaitForEvents(1, &event_meanshift);
+    //    CheckOpenCLError(status, "clWaitForEvents meanshift.");
+    //
+    //    //////////////////////////////////////////////////////////////////////////////////////////////////
+    //    // PEAKS KERNEL
+    //    /* input buffer peaks*/
+    //    status = clSetKernelArg(meanshiftPeaksKernel,
+    //                            0,
+    //                            sizeof (cl_mem),
+    //                            &d_peaksBuffer);
+    //    CheckOpenCLError(status, "clSetKernelArg. (peaksBuffer)");
+    //
+    //    /* image width */
+    //    status = clSetKernelArg(meanshiftPeaksKernel,
+    //                            1,
+    //                            sizeof (cl_uint),
+    //                            &width);
+    //
+    //    CheckOpenCLError(status, "clSetKernelArg. (width)");
+    //
+    //    /* image height */
+    //    status = clSetKernelArg(meanshiftPeaksKernel,
+    //                            2,
+    //                            sizeof (cl_uint),
+    //                            &height);
+    //
+    //    CheckOpenCLError(status, "clSetKernelArg. (height)");
+    //
+    //    cl_event wait_events[] = {event_meanshift};
+    //
+    //
+    //    cout << "DBG: peaksKernel begins" << endl;
+    //    status = clEnqueueNDRangeKernel(commandQueue,
+    //                                    meanshiftPeaksKernel,
+    //                                    2,
+    //                                    NULL, //offset
+    //                                    globalThreadsMeanshift,
+    //                                    localThreadsMeanshift,
+    //                                    1,
+    //                                    wait_events,
+    //                                    &event_peaks);
+    //    CheckOpenCLError(status, "clEnqueueNDRangeKernel peaksKernel.");
+    //    cout << "DBG: peaksKernel ends" << endl;
+    //
+    //    status = clWaitForEvents(1, &event_peaks);
+    //    CheckOpenCLError(status, "clWaitForEvents peaks boost.");
+    //
+    //    //////////////////////////////////////////////////////////////////////////////////////////////////
+    //    // RESULT KERNEL
+    //    /* input buffer X*/
+    //    status = clSetKernelArg(meanshiftResultKernel,
+    //                            0,
+    //                            sizeof (cl_mem),
+    //                            &d_countsBuffer);
+    //    CheckOpenCLError(status, "clSetKernelArg. (countsBuffer)");
+    //
+    //
+    //    /* input buffer Y*/
+    //    status = clSetKernelArg(meanshiftResultKernel,
+    //                            1,
+    //                            sizeof (cl_mem),
+    //                            &d_peaksBuffer);
+    //    CheckOpenCLError(status, "clSetKernelArg. (peaksBuffer)");
+    //
+    //    /* output buffer */
+    //    status = clSetKernelArg(meanshiftResultKernel,
+    //                            2,
+    //                            sizeof (cl_mem),
+    //                            &d_outputImageBuffer);
+    //
+    //    CheckOpenCLError(status, "clSetKernelArg. (outputImage)");
+    //
+    //    /* image width */
+    //    status = clSetKernelArg(meanshiftResultKernel,
+    //                            3,
+    //                            sizeof (cl_uint),
+    //                            &width);
+    //
+    //    CheckOpenCLError(status, "clSetKernelArg. (width)");
+    //
+    //    /* image height */
+    //    status = clSetKernelArg(meanshiftResultKernel,
+    //                            4,
+    //                            sizeof (cl_uint),
+    //                            &height);
+    //
+    //    CheckOpenCLError(status, "clSetKernelArg. (height)");
+    //
+    //
+    //    //the global number of threads in each dimension has to be divisible
+    //    // by the local dimension numbers
+    //    //size_t globalThreadsResult[] = {
+    //    //    ((width + blockSizeX - 1) / blockSizeX) * blockSizeX,
+    //    //    ((height + blockSizeY - 1) / blockSizeY) * blockSizeY
+    //    //};
+    //
+    //    //size_t localThreadsResult[] = {blockSizeX, blockSizeY};
+    //
+    //    cl_event wait_events_res[] = {event_peaks};
+    //
+    //    cout << "DBG: resultKernel begins" << endl;
+    //    status = clEnqueueNDRangeKernel(commandQueue,
+    //                                    meanshiftResultKernel,
+    //                                    2,
+    //                                    NULL, //offset
+    //                                    globalThreadsMeanshift,
+    //                                    localThreadsMeanshift,
+    //                                    //NULL,
+    //                                    1,
+    //                                    wait_events_res,
+    //                                    &event_result);
+    //
+    //    CheckOpenCLError(status, "clEnqueueNDRangeKernel meanshiftResult.");
+    //    cout << "DBG: resultKernel ends" << endl;
+    //
+    //    status = clWaitForEvents(1, &event_result);
+    //    CheckOpenCLError(status, "clWaitForEvents.");
+    //
+    //    printTiming(event_meanshift, "Mean-shift: ");
+    //    printTiming(event_peaks, "Mean-shift Peaks: ");
+    //    printTiming(event_result, "Mean-shift Result: ");
 
     //Read back the image - if textures were used for showing this wouldn't be necessary
     //blocking read
@@ -978,17 +1119,26 @@ int cleanup()
     else
     {
         /* Mean-shift section */
-        status = clReleaseKernel(meanshiftResultKernel);
-        CheckOpenCLError(status, "clReleaseKernel meanshiftResult.");
-        status = clReleaseKernel(meanshiftKernel);
+        //        status = clReleaseKernel(meanshiftResultKernel);
+        //        CheckOpenCLError(status, "clReleaseKernel meanshiftResult.");
+        //        status = clReleaseKernel(meanshiftBeginKernel);
+        //        CheckOpenCLError(status, "clReleaseKernel meanshift.");
+        //        status = clReleaseKernel(meanshiftPeaksKernel);
+        //        CheckOpenCLError(status, "clReleaseKernel meanshiftPeaks.");
+        status = clReleaseKernel(meanshift);
         CheckOpenCLError(status, "clReleaseKernel meanshift.");
-        status = clReleaseKernel(meanshiftPeaksKernel);
-        CheckOpenCLError(status, "clReleaseKernel meanshiftPeaks.");
+
 
         status = clReleaseMemObject(d_countsBuffer);
         CheckOpenCLError(status, "clReleaseMemObject countsBuffer");
         status = clReleaseMemObject(d_peaksBuffer);
         CheckOpenCLError(status, "clReleaseMemObject peaksBuffer");
+        status = clReleaseMemObject(d_colors);
+        CheckOpenCLError(status, "clReleaseMemObject colors");
+        status = clReleaseMemObject(d_uniquePeaks);
+        CheckOpenCLError(status, "clReleaseMemObject uniquePeaks");
+        status = clReleaseMemObject(d_peakCount);
+        CheckOpenCLError(status, "clReleaseMemObject peakCount");
     }
 
     status = clReleaseProgram(program);
