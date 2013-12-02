@@ -13,6 +13,7 @@
 #pragma comment( lib, "SDLmain" )
 #pragma comment( lib, "SDL_image" )
 
+
 using namespace std;
 
 #define MIN(a, b) ((a) > (b) ? (b) : (a))
@@ -39,13 +40,17 @@ cl_context context;
 cl_command_queue commandQueue;
 cl_kernel kmeans;
 cl_kernel meanshiftBeginKernel, meanshiftPeaksKernel, meanshiftResultKernel, meanshift;
-//scl_kernel msKernel, msResult;
+
+//cl_kernel edgeXKernel, edgeYKernel, kmeansResultKernel;
+//cl_kernel meanshiftKernel, meanshiftPeaksKernel, meanshiftResultKernel;
+//cl_kernel msKernel, msResult;
 cl_program program;
 
 
 /** CL memory buffer for images */
 cl_mem d_inputImageBuffer = NULL;
 cl_mem d_outputImageBuffer = NULL;
+
 
 /* k-means memory buffers */
 cl_mem d_pixels = NULL;
@@ -86,6 +91,7 @@ void generateCenters(int K, cl_uchar4* centers)
         centers->s[3] = 255;
     }
 }
+
 
 int printTiming(cl_event event, const char* title)
 {
@@ -589,6 +595,7 @@ int setupCL()
 
         // Check group size against group size returned by kernel
         ciErr = clGetKernelWorkGroupInfo(meanshift,
+
                                          cdDevices[deviceIndex],
                                          CL_KERNEL_WORK_GROUP_SIZE,
                                          sizeof (size_t),
@@ -625,6 +632,7 @@ int setupCL()
         //                                         0);
         //        CheckOpenCLError(ciErr, "clGetKernelInfo");
         //        kernelWorkGroupSize = MIN(tempKernelWorkGroupSize, kernelWorkGroupSize);
+
     }
 
 
@@ -866,6 +874,7 @@ int runMeanShiftKernels()
                                     NULL,
                                     &event_meanshift);
 
+
     CheckOpenCLError(status, "clEnqueueNDRangeKernel meanshift.");
     cout << "DBG: meanshiftKernel ends" << endl;
 
@@ -1083,6 +1092,7 @@ int runMeanShiftKernels()
     //    printTiming(event_peaks, "Mean-shift Peaks: ");
     //    printTiming(event_result, "Mean-shift Result: ");
 
+
     //Read back the image - if textures were used for showing this wouldn't be necessary
     //blocking read
     status = clEnqueueReadBuffer(commandQueue,
@@ -1139,6 +1149,7 @@ int cleanup()
         CheckOpenCLError(status, "clReleaseMemObject uniquePeaks");
         status = clReleaseMemObject(d_peakCount);
         CheckOpenCLError(status, "clReleaseMemObject peakCount");
+
     }
 
     status = clReleaseProgram(program);
