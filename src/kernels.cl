@@ -266,10 +266,15 @@ if (peakcount[0] == -1)
     printf("pocet vrcholu: %d\n", peakcount[0]);
     //TODO rozlozim barvy a vytvorim mapovaci funkci
     int colorStep = convert_int_rte((256*256*256)/peakcount[0]);
-
+//printf("%d - [%d,%d,%d]\n", colorStep, (colorStep / 65536) % 256, (colorStep / 265) % 256, colorStep % 256);
     for (int n =0; n<peakcount[0]; n++)
     {
-        colors[uniquepeaks[n]] = (n*colorStep);
+        int actstep = n*colorStep;
+        colors[uniquepeaks[n]].s0 = (actstep / 65536) % 256;
+        colors[uniquepeaks[n]].s1 = (actstep / 256) % 256;
+        colors[uniquepeaks[n]].s2 = actstep % 256;
+        colors[uniquepeaks[n]].s3 = 255;
+        printf("[%d,%d,%d]\n",colors[uniquepeaks[n]].s0,colors[uniquepeaks[n]].s1,colors[uniquepeaks[n]].s2);
     }
 
     printf("[%d,%d] critic section - end\n",x,y);
@@ -284,9 +289,11 @@ barrier(CLK_GLOBAL_MEM_FENCE);
 //output[gid].s1 = 255-peaks[gid];
 //output[gid].s2 = 255-peaks[gid];
 //printf("[%d,%d,%d]\n",colors[gid].s0,colors[gid].s1,colors[gid].s2);
-output[gid] = colors[peak];
 
-output[gid].s3 = 255;
+gid = x + y*width;
+peak = peaks[gid];
+output[gid] = colors[peak];
+//printf("%v4\n",output[gid]);
 }
 
 
