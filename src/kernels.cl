@@ -236,33 +236,3 @@ __kernel void ms_begin(__global uchar4* input, __global uint* peaks, uint width,
     output[x + y*width] = input[peaks[x + y*width]];
 }
 
-
-
-
-__kernel void ms_optimize(__global uint* peaks, uint width)
-{
-//    int gid = get_global_id(0) + width * get_global_id(1);
-//
-//    int peak = peaks[gid];
-//
-//    for (int i=0; i<100;i++)
-//    {
-//        if(peaks[peaks[peak]] == peaks[peak])
-//        {
-//            break;
-//        }
-//        printf("neco");
-//        peaks[gid] = peaks[peak];
-//        peak = peaks[peaks[peak]];
-//    }
-}
-
-
-
-
-__kernel void ms_color(__global uchar4* output, __global uchar* colors, __global uint* peaks, uint width)
-{
-    int gid = get_global_id(0) + width * get_global_id(1);
-
-    output[gid] = colors[peaks[gid]];
-}
