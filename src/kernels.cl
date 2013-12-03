@@ -122,7 +122,7 @@ __kernel void ms_begin(__global uchar4* input, __global uint* peaks, uint width,
 {
     int x = get_global_id(0);
     int y = get_global_id(1);
-    float h = 2;
+    float h = convert_float(winsize);
 
     //reconstruct window by given param
     float actx = convert_float(x);
@@ -143,15 +143,10 @@ __kernel void ms_begin(__global uchar4* input, __global uint* peaks, uint width,
     //cycle control value
     bool cont = true;
     int iter = 0;
-    //mean structures
-    //float newX, newY;
 
     //begincycle - until the step is bigger than relevant
     do {
-        //newX = 0;
-        //newY = 0;
-
-        numX = numY = den =0;
+        numX = numY = den = 0;
 
         for (int wy = wymin; wy < wymax; wy++)
         {
@@ -167,11 +162,11 @@ __kernel void ms_begin(__global uchar4* input, __global uint* peaks, uint width,
                     //compute lengths for [wx,wy] - [x,y]
                     int gid = convert_int_rte(actx) + convert_int_rte(acty)*width;
 
-                    float normalXDiff = actx/(width-1) - wx/(width-1);
-                    float normalYDiff = acty/(height-1) - wy/(height-1);
-                    float normalRDiff = convert_float(input[gid].s0)/255 - convert_float(input[wx + wy*width].s0)/255;
-                    float normalGDiff = convert_float(input[gid].s1)/255 - convert_float(input[wx + wy*width].s1)/255;
-                    float normalBDiff = convert_float(input[gid].s2)/255 - convert_float(input[wx + wy*width].s2)/255;
+                    float normalXDiff = actx - wx;
+                    float normalYDiff = acty - wy;
+                    float normalRDiff = convert_float(input[gid].s0) - convert_float(input[wx + wy*width].s0);
+                    float normalGDiff = convert_float(input[gid].s1) - convert_float(input[wx + wy*width].s1);
+                    float normalBDiff = convert_float(input[gid].s2) - convert_float(input[wx + wy*width].s2);
 
                     /* ||act - w||^2 */
                     float length =
@@ -220,7 +215,7 @@ __kernel void ms_begin(__global uchar4* input, __global uint* peaks, uint width,
 
         //endcycle
         iter++;
-    } while (cont && iter < 1000);
+    } while (cont && iter < 2000);
 
     actx = convert_float(max(convert_int_rte(actx),0));
     acty = convert_float(max(convert_int_rte(acty),0));
@@ -230,9 +225,9 @@ __kernel void ms_begin(__global uchar4* input, __global uint* peaks, uint width,
 
 
     //store the peak position to peaks array
-    peaks[x + y*width] = convert_int_rte(actx) + convert_int_rte(acty)*width;
+    //peaks[x + y*width] = convert_int_rte(actx) + convert_int_rte(acty)*width;
 
     //set result color
-    output[x + y*width] = input[peaks[x + y*width]];
+    output[x + y*width] = input[convert_int_rte(actx) + convert_int_rte(acty)*width];
 }
 

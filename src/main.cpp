@@ -75,7 +75,7 @@ size_t blockSizeX = 1024;
 size_t blockSizeY = 1;
 
 /* Size of mean-shift window */
-int msWinSize = 5;
+int msWinSize = 15;
 
 /* Maximal length of mean-shift */
 float msMaxLength = 10.0f;
