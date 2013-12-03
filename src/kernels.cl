@@ -118,7 +118,7 @@ __kernel void kmeans(__global uchar4* input, __global uchar4* output, __global u
 }
 
 
-__kernel void ms_begin(__global uchar4* input, __global uint* peaks, uint width, uint height, uint winsize,__global uchar4* output)
+__kernel void ms_begin(__global uchar4* input, uint width, uint height, uint winsize, __global uchar4* output)
 {
     int x = get_global_id(0);
     int y = get_global_id(1);
@@ -131,9 +131,10 @@ __kernel void ms_begin(__global uchar4* input, __global uint* peaks, uint width,
     int wymin = acty - ((winsize-1) / 2);
     int wxmax = actx + ((winsize-1) / 2) + 1;
     int wxmin = actx - ((winsize-1) / 2);
+    uint limit = max(width,height);
 
-    float oldx = convert_float(x);
-    float oldy = convert_float(y);
+    float oldx = actx;
+    float oldy = acty;
 
     //mean-shift
     float numX, numY, den;
@@ -141,8 +142,12 @@ __kernel void ms_begin(__global uchar4* input, __global uint* peaks, uint width,
     float hinv = 1/h;
 
     //cycle control value
-    bool cont = true;
     int iter = 0;
+
+    int gid;
+    float length;
+
+    float normalXDiff, normalYDiff, normalRDiff, normalGDiff, normalBDiff;
 
     //begincycle - until the step is bigger than relevant
     do {
@@ -160,16 +165,16 @@ __kernel void ms_begin(__global uchar4* input, __global uint* peaks, uint width,
                 else
                 {
                     //compute lengths for [wx,wy] - [x,y]
-                    int gid = convert_int_rte(actx) + convert_int_rte(acty)*width;
+                    gid = convert_int_rte(actx) + convert_int_rte(acty)*width;
 
-                    float normalXDiff = actx - wx;
-                    float normalYDiff = acty - wy;
-                    float normalRDiff = convert_float(input[gid].s0) - convert_float(input[wx + wy*width].s0);
-                    float normalGDiff = convert_float(input[gid].s1) - convert_float(input[wx + wy*width].s1);
-                    float normalBDiff = convert_float(input[gid].s2) - convert_float(input[wx + wy*width].s2);
+                    normalXDiff = actx - wx;
+                    normalYDiff = acty - wy;
+                    normalRDiff = convert_float(input[gid].s0) - convert_float(input[wx + wy*width].s0);
+                    normalGDiff = convert_float(input[gid].s1) - convert_float(input[wx + wy*width].s1);
+                    normalBDiff = convert_float(input[gid].s2) - convert_float(input[wx + wy*width].s2);
 
                     /* ||act - w||^2 */
-                    float length =
+                    length =
                         normalXDiff * normalXDiff +
                         normalYDiff * normalYDiff +
                         normalRDiff * normalRDiff +
@@ -198,34 +203,30 @@ __kernel void ms_begin(__global uchar4* input, __global uint* peaks, uint width,
         actx = numX/den;
         acty = numY/den;
 
-//printf("[%d:%d](%d)- old:[%f,%f], new diff:[%f,%f]\n", x,y,iter,oldx,oldy,actx,acty);
-
         //shift the window to the mean be in the center
         wymax = convert_int_rte(acty) + ((winsize-1) / 2) + 1;
         wymin = convert_int_rte(acty) - ((winsize-1) / 2);
         wxmax = convert_int_rte(actx) + ((winsize-1) / 2) + 1;
         wxmin = convert_int_rte(actx) - ((winsize-1) / 2);
 
-        if(fabs(oldx - actx) <= 0.1 && fabs(oldy - acty) <= 0.1)
+        if(fabs(oldx - actx) < 0.1)
         {
-            //the step is lower the 0.5pix
-            cont = false;
+            if(fabs(oldy - acty) < 0.1)
+            {
+                //the step is lower set
+                break;
+            }
         }
-
 
         //endcycle
         iter++;
-    } while (cont && iter < 2000);
+    } while (iter < limit);
 
     actx = convert_float(max(convert_int_rte(actx),0));
     acty = convert_float(max(convert_int_rte(acty),0));
 
     actx = convert_float(min(convert_int_rte(actx),convert_int_rte(width)-1));
     acty = convert_float(min(convert_int_rte(acty),convert_int_rte(height)-1));
-
-
-    //store the peak position to peaks array
-    //peaks[x + y*width] = convert_int_rte(actx) + convert_int_rte(acty)*width;
 
     //set result color
     output[x + y*width] = input[convert_int_rte(actx) + convert_int_rte(acty)*width];
