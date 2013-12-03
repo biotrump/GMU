@@ -142,7 +142,8 @@ float newX, newY;
 
 //begincycle - until the step is bigger than relevant
 do {
-    newX = newY = 0;
+    newX = 0;
+    newY = 0;
     for (int wy = wymin; wy < wymax; wy++)
     {
         for (int wx = wxmin; wx < wxmax; wx++)
@@ -167,12 +168,21 @@ do {
                 //if the length is bigger the maxlength, set 0 there
                 //otherwise set the length
                 int gid = convert_int_rte(actx) + convert_int_rte(acty)*width;
-                float length = 1/sqrt(convert_float(
-                    (actx-wx)*(actx-wx) +
-                    (acty-wy)*(acty-wy) +
-                    (input[gid].s0 - input[wx + wy*width].s0)*(input[gid].s0 - input[wx + wy*width].s0) +
-                    (input[gid].s1 - input[wx + wy*width].s1)*(input[gid].s1 - input[wx + wy*width].s1) +
-                    (input[gid].s2 - input[wx + wy*width].s2)*(input[gid].s2 - input[wx + wy*width].s2)));
+
+                float normalXDiff = actx/(width-1) - wx/(width-1);
+                float normalYDiff = acty/(height-1) - wx/(height-1);
+                float normalRDiff = convert_float(input[gid].s0)/255 - convert_float(input[wx + wy*width].s0)/255;
+                float normalGDiff = convert_float(input[gid].s1)/255 - convert_float(input[wx + wy*width].s1)/255;
+                float normalBDiff = convert_float(input[gid].s2)/255 - convert_float(input[wx + wy*width].s2)/255;
+
+                float length = 1-sqrt(
+                    normalXDiff*normalXDiff +
+                    normalYDiff*normalYDiff +
+                    normalRDiff*normalRDiff +
+                    normalGDiff*normalGDiff +
+                    normalBDiff*normalBDiff);
+
+//printf("(%f) + (%f) + (%f) + (%f)+ (%f) = %f \n", normalXDiff, normalYDiff, normalRDiff, normalGDiff, normalBDiff,length);
 
                 newX += (wx - actx) * length;
                 newY += (wy - acty) * length;
@@ -193,7 +203,7 @@ do {
     wxmax = convert_int_rte(actx) + ((winsize-1) / 2) + 1;
     wxmin = convert_int_rte(actx) - ((winsize-1) / 2);
 
-    if((newX < 0 ? -1*newX : newX) <= 0.2 && (newY < 0 ? -1*newY : newY) <= 0.2)
+    if(fabs(newX) <= 0.2 && fabs(newY) <= 0.2)
     {
         //the step is lower the 0.5pix
         cont = false;
@@ -216,7 +226,7 @@ int gid = x + y*width;
 peaks[gid] = convert_int_rte(actx) + convert_int_rte(acty)*width;
 
 //increment value on peak position in counts array
-counts[convert_int_rte(actx) + convert_int_rte(acty)*width] = counts[convert_int_rte(actx) + convert_int_rte(acty)*width] + 1;
+//counts[convert_int_rte(actx) + convert_int_rte(acty)*width] = counts[convert_int_rte(actx) + convert_int_rte(acty)*width] + 1;
 
 barrier(CLK_GLOBAL_MEM_FENCE);
 
@@ -239,7 +249,7 @@ if (peakcount[0] == -1)
     peakcount[0] = 0; //lock the critical section
 
     //begin of critical section
-    printf("[%d,%d] critic section - begin\n",x,y);
+    //printf("[%d,%d] critic section - begin\n",x,y);
     for (int yy=0; yy<height; yy++)
     {
         for (int xx=0; xx<width; xx++)
@@ -263,37 +273,198 @@ if (peakcount[0] == -1)
             }
         }
     }
-    printf("pocet vrcholu: %d\n", peakcount[0]);
-    //TODO rozlozim barvy a vytvorim mapovaci funkci
-    int colorStep = convert_int_rte((256*256*256)/peakcount[0]);
+
+    //printf("pocet vrcholu: %d\n", peakcount[0]);
+    int colorStep = (256*256*256)/peakcount[0];
 //printf("%d - [%d,%d,%d]\n", colorStep, (colorStep / 65536) % 256, (colorStep / 265) % 256, colorStep % 256);
     for (int n =0; n<peakcount[0]; n++)
     {
+
         int actstep = n*colorStep;
         colors[uniquepeaks[n]].s0 = (actstep / 65536) % 256;
         colors[uniquepeaks[n]].s1 = (actstep / 256) % 256;
         colors[uniquepeaks[n]].s2 = actstep % 256;
         colors[uniquepeaks[n]].s3 = 255;
-        printf("[%d,%d,%d]\n",colors[uniquepeaks[n]].s0,colors[uniquepeaks[n]].s1,colors[uniquepeaks[n]].s2);
+        //printf("[%d,%d,%d]\n",colors[uniquepeaks[n]].s0,colors[uniquepeaks[n]].s1,colors[uniquepeaks[n]].s2);
+        //TODO tady se barvy spravne ulozi
     }
 
-    printf("[%d,%d] critic section - end\n",x,y);
+    //printf("[%d,%d] critic section - end\n",x,y);
 }
-
-barrier(CLK_GLOBAL_MEM_FENCE);
-//tady se podivam jestli globalni counter je 0, pak vyhledavam, jinak jdu k dalsi bariere
-//vyhledavam postupne pokud jsem jeste nenasel
-
-//TODO obarvim podle colors[peaks[gid]];
-//output[gid].s0 = 255-peaks[gid];
-//output[gid].s1 = 255-peaks[gid];
-//output[gid].s2 = 255-peaks[gid];
-//printf("[%d,%d,%d]\n",colors[gid].s0,colors[gid].s1,colors[gid].s2);
-
+printf("11111111111\n");
+barrier(CLK_GLOBAL_MEM_FENCE); //opravdu funguje???
+printf("00000000000\n");
 gid = x + y*width;
-peak = peaks[gid];
-output[gid] = colors[peak];
+//printf("[%d,%d,%d]\n",colors[peaks[x + y*width]].s0,colors[peaks[x + y*width]].s1,colors[peaks[x + y*width]].s2);
+
+//peak = peaks[gid];
+output[gid] = colors[peaks[gid]];
+//TODO tady je vetsina barev spatne zobrazena.. jakto?!
+//printf("[%d,%d,%d]\n", output[gid].s0, output[gid].s1, output[gid].s2);
 //printf("%v4\n",output[gid]);
+
+}
+
+__kernel void ms_begin(__global uchar4* input, __global uint* peaks, uint width, uint height, uint winsize)
+{
+    int x = get_global_id(0);
+    int y = get_global_id(1);
+    float h = 1;
+
+    //reconstruct window by given param
+    float actx = convert_float(x);
+    float acty = convert_float(y);
+    int wymax = acty + ((winsize-1) / 2) + 1;
+    int wymin = acty - ((winsize-1) / 2);
+    int wxmax = actx + ((winsize-1) / 2) + 1;
+    int wxmin = actx - ((winsize-1) / 2);
+
+    float oldx = convert_float(x);
+    float oldy = convert_float(y);
+
+    //mean-shift
+    double numX, numY, den;
+    double ecko;
+    float hinv = 1/h;
+
+    //cycle control value
+    bool cont = true;
+    int iter = 0;
+    //mean structures
+    //float newX, newY;
+
+    //begincycle - until the step is bigger than relevant
+    do {
+        //newX = 0;
+        //newY = 0;
+
+        numX = numY = den =0;
+
+        for (int wy = wymin; wy < wymax; wy++)
+        {
+            for (int wx = wxmin; wx < wxmax; wx++)
+            {
+                if (wx < 0 || wy < 0 || wx >= width|| wy >= height)
+                {
+                    //out of original window
+                    //set 0 to the position of the x in local cache
+                    continue;
+                }
+//                else if (wx == convert_int(actx) && wy == convert_int(acty))
+//                {
+//                    //set 1 to the position of the x
+//                    //to [actx-wxmin,acty-wymin] set 1
+//
+//                    newX += (wx - actx);
+//                    newY += (wy - acty);
+//                }
+                else
+                {
+                    //compute lengths for [wx,wy] - [x,y]
+                    //if the length is bigger the maxlength, set 0 there
+                    //otherwise set the length
+                    int gid = convert_int_rte(actx) + convert_int_rte(acty)*width;
+
+                    float normalXDiff = actx/(width-1) - wx/(width-1);
+                    float normalYDiff = acty/(height-1) - wy/(height-1);
+                    float normalRDiff = convert_float(input[gid].s0)/255 - convert_float(input[wx + wy*width].s0)/255;
+                    float normalGDiff = convert_float(input[gid].s1)/255 - convert_float(input[wx + wy*width].s1)/255;
+                    float normalBDiff = convert_float(input[gid].s2)/255 - convert_float(input[wx + wy*width].s2)/255;
+
+                    //float length = 1-sqrt(
+
+                    /* ||act - w||^2 */
+                    float length =
+                        normalXDiff * normalXDiff +
+                        normalYDiff * normalYDiff +
+                        normalRDiff * normalRDiff +
+                        normalGDiff * normalGDiff +
+                        normalBDiff * normalBDiff;
+
+                    /* e^((-length)/h) */
+                    ecko = exp(-hinv * length);
+
+                    /* sum of X coordinate - numerator */
+                    numX += wx * ecko;
+
+                    /* sum of Y coordinate - numerator */
+                    numY += wy * ecko;
+
+                    /* sum of denominator */
+                    den += ecko;
+
+                   // newX += (wx - actx) * length;
+                    //newY += (wy - acty) * length;
+                }
+            }
+        }
+
+
+        //recompute mean of the window
+        oldx = actx;
+        oldy = acty;
+
+        //actx = actx + newX;
+        actx = numX/den;
+        acty = numY/den;
+        //acty = acty + newY;
+//printf("[%d:%d](%d)- old:[%f,%f], new diff:[%f,%f]\n", x,y,iter,oldx,oldy,actx,acty);
+        //shift the window to the mean be in the center
+        wymax = convert_int_rte(acty) + ((winsize-1) / 2) + 1;
+        wymin = convert_int_rte(acty) - ((winsize-1) / 2);
+        wxmax = convert_int_rte(actx) + ((winsize-1) / 2) + 1;
+        wxmin = convert_int_rte(actx) - ((winsize-1) / 2);
+
+        //if(fabs(newX) <= 0.1 && fabs(newY) <= 0.1)
+        if(fabs(oldx - actx) <= 0.1 && fabs(oldy - acty) <= 0.1)
+        {
+            //the step is lower the 0.5pix
+            cont = false;
+        }
+
+
+        //endcycle
+        iter++;
+    } while (cont && iter < 1000);
+
+    actx = convert_float(max(convert_int_rte(actx),0));
+    acty = convert_float(max(convert_int_rte(acty),0));
+
+    actx = convert_float(min(convert_int_rte(actx),convert_int_rte(width)-1));
+    acty = convert_float(min(convert_int_rte(acty),convert_int_rte(height)-1));
+
+
+    //store the peak position to peaks array
+    peaks[x + y*width] = convert_int_rte(actx) + convert_int_rte(acty)*width;
 }
 
 
+
+
+__kernel void ms_optimize(__global uint* peaks, uint width)
+{
+//    int gid = get_global_id(0) + width * get_global_id(1);
+//
+//    int peak = peaks[gid];
+//
+//    for (int i=0; i<100;i++)
+//    {
+//        if(peaks[peaks[peak]] == peaks[peak])
+//        {
+//            break;
+//        }
+//        printf("neco");
+//        peaks[gid] = peaks[peak];
+//        peak = peaks[peaks[peak]];
+//    }
+}
+
+
+
+
+__kernel void ms_color(__global uchar4* output, __global uchar* colors, __global uint* peaks, uint width)
+{
+    int gid = get_global_id(0) + width * get_global_id(1);
+
+    output[gid] = colors[peaks[gid]];
+}
