@@ -6,21 +6,8 @@
  */
 
 
-/* Implementace K-means
- * Prozatim v jednom kernelu (vyhoda je ze se nemusi sznchronizovat postup zpracovani kernelu,
-                              ani si nejsem jisty jak to udelat, "nevyhodou" je uzke hrdlo pri pre
-							  pocitavani stredu, kdy pracuje K vlaken a ostatni cekaji, tohle se
-							  vetsim poctem kernelu nevyresi, protoze by stejne vlakna musely
-							  pockat na prepocitani stredu)
- * Postup zpracovani (jak by mel byt, nejsem si jisty zda to tak je):
- *
- * Kazdy pixel se priradi do clusteru (k nejblizsimu stredu).
- * Pomoci barrier() se pocka na vsechna vlakna, pote se K vlaken
- * postara o prepocitani stredu. Pocka se na vsechna prepocitani a jede se znovu.
- */
  /* TODO - velke obrazky, zpracuje se cast..problem bude nekde u maximalniho poctu vlaken nebo tak
-         - artefakty u nejakych obrazku, pripadne jednou to zpracuje dobre, podruhe podivne
-		 - doba zpracovani (?)
+         - artefakty u nejakych obrazku, pripadne jednou to zpracuje dobre, podruhe podivne - zpusobeno barierami
 		 - zadani parametru K z cmdl, omezeni na max napr 16.
 		 - doladit (nekonceny cyklus napr, detekce zmeny clsuteru apod.) (?)
  */
@@ -31,7 +18,7 @@ __kernel void kmeans(__global uchar4* input, __global uchar4* output, __global u
 	bool center_change = true; // detekce zmeny stredu (prepocitani)
 
 	uint pixel_index = gidX + width * gidY;
-	float min_dist; // nejmensi vzdalenost
+	float min_dist = 1000000.0f; // nejmensi vzdalenost
 
 	uint last_cluster; // minuly cluster nebo stred
 	float last_dist = 0.0f; // minula vzdalenost
@@ -39,32 +26,19 @@ __kernel void kmeans(__global uchar4* input, __global uchar4* output, __global u
 	while (true)
 	{
 		for (uint i = 0; i < K; i++)
-		{
-			// spocteni vzdalenosti pixelu od stredu
+		{	// spocteni vzdalenosti pixelu od stredu
 			float dist = 0.0f;
-			float3 distxyz;
-			distxyz.x = convert_float(centroids[i].x) - convert_float(input[pixel_index].x);
-			distxyz.x *= distxyz.x;
-			distxyz.y = convert_float(centroids[i].y) - convert_float(input[pixel_index].y);
-			distxyz.y *= distxyz.y;
-			distxyz.z = convert_float(centroids[i].z) - convert_float(input[pixel_index].z);
-			distxyz.z *= distxyz.z;
+			float4 distxyz;
+
+			distxyz = convert_float4(centroids[i]) - convert_float4(input[pixel_index]);
+			distxyz = distxyz * distxyz;
 			dist = distxyz.x + distxyz.y + distxyz.z;
 
-			if (i == 0)
-			{
+			if (dist < min_dist)
+			{ // prirazeni pixelu do noveho clusteru
 				min_dist = dist;
 				pixels[pixel_index] = i;
 			}
-			else
-			{
-				if (dist < min_dist)
-				{ // prirazeni pixelu do noveho clusteru
-					min_dist = dist;
-					pixels[pixel_index] = i;
-				}
-			}
-
 		}
 
 		// konec pokud se pixel nepresunul, vzdalenost zustala stejna (tedy zadna zmena) a pokud se neprepocitavaji stredy
@@ -78,12 +52,11 @@ __kernel void kmeans(__global uchar4* input, __global uchar4* output, __global u
 		last_cluster = pixels[pixel_index];
 		last_dist = min_dist;
 		// pockame na zpracovani vsech pixelu
-		barrier(CLK_GLOBAL_MEM_FENCE);
+		//barrier(CLK_GLOBAL_MEM_FENCE);
 
 		// poslani K vlaken na clustery -> prepocitani stredu
 		if (gidX < K && center_change)
-		{
-			// prumer hodnot
+		{	// prumer hodnot
 			float4 sum = {0.0f, 0.0f, 0.0f, 0.0f};
 			uint num = 0;
 
@@ -113,7 +86,7 @@ __kernel void kmeans(__global uchar4* input, __global uchar4* output, __global u
 			center_change = false;
 		}
 
-		barrier(CLK_GLOBAL_MEM_FENCE);
+		//barrier(CLK_GLOBAL_MEM_FENCE);
 	}
 }
 

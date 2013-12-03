@@ -75,10 +75,10 @@ void generateCenters(int K, cl_uchar4* centers)
 {
     for (int i = 0; i < K; i++)
     {
-        centers->s[0] = rand() % 256;
-        centers->s[1] = rand() % 256;
-        centers->s[2] = rand() % 256;
-        centers->s[3] = 255;
+        centers[i].s[0] = rand() % 256;
+        centers[i].s[1] = rand() % 256;
+        centers[i].s[2] = rand() % 256;
+        centers[i].s[3] = 255;
     }
 }
 
@@ -602,17 +602,17 @@ int runKMeansKernels()
     //the global number of threads in each dimension has to be divisible
     // by the local dimension numbers
     size_t globalThreadsPixels[] = {
-        /*width, */blockSizeX,
+        width,
         height
     };
-    size_t localThreadsPixels[] = {/*width, */blockSizeX, 1};
+    size_t localThreadsPixels[] = {width, 1};
 
     status = clEnqueueNDRangeKernel(commandQueue,
                                     kmeans,
                                     2,
                                     NULL, //offset
                                     globalThreadsPixels,
-                                    /*NULL, */localThreadsPixels,
+                                    localThreadsPixels,
                                     0,
                                     NULL,
                                     &event_kmeans);
