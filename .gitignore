@@ -22,3 +22,6 @@ doc/gmu.pdf
 *.png
 *.jpg
 *.jpeg
+/doc/gmu.out
+/doc/gmu.aux
+/doc/gmu.log
