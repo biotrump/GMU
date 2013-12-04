@@ -11,82 +11,59 @@
 		 - zadani parametru K z cmdl, omezeni na max napr 16.
 		 - doladit (nekonceny cyklus napr, detekce zmeny clsuteru apod.) (?)
  */
-__kernel void kmeans(__global uchar4* input, __global uchar4* output, __global uchar4* centroids, __global uint* pixels, uint width, uint height, uint K)
+__kernel void assignCentroids(__global uchar4* input, __global uchar4* output, __global uchar4* centroids, __global uint* pixels, uint width, uint height, uint K)
 {
 	uint gidX = get_global_id(0);
 	uint gidY = get_global_id(1);
-	bool center_change = true; // detekce zmeny stredu (prepocitani)
 
 	uint pixel_index = gidX + width * gidY;
 	float min_dist = 1000000.0f; // nejmensi vzdalenost
 
-	uint last_cluster; // minuly cluster nebo stred
-	float last_dist = 0.0f; // minula vzdalenost
+	for (uint i = 0; i < K; i++)
+	{	// spocteni vzdalenosti pixelu od stredu
+		float dist = 0.0f;
+		float4 distxyz;
 
-	while (true)
+		distxyz = convert_float4(centroids[i]) - convert_float4(input[pixel_index]);
+		distxyz = distxyz * distxyz;
+		dist = distxyz.x + distxyz.y + distxyz.z;
+
+		if (dist < min_dist)
+		{ // prirazeni pixelu do noveho clusteru
+			min_dist = dist;
+			pixels[pixel_index] = i;
+		}
+	}
+
+	output[pixel_index] = centroids[pixels[pixel_index]];
+	output[pixel_index].w = 255;
+}
+
+/*
+ * Prepocitani stredu shluku.
+ */
+__kernel void recomputeCenters(__global uchar4* input, __global uchar4* centroids, __global uint* pixels, uint width, uint height, uint K)
+{
+	uint center = get_global_id(0);
+
+	if (center < K)
 	{
-		for (uint i = 0; i < K; i++)
-		{	// spocteni vzdalenosti pixelu od stredu
-			float dist = 0.0f;
-			float4 distxyz;
+		float4 sum = {0.0f, 0.0f, 0.0f, 0.0f};
+		uint num = 0;
 
-			distxyz = convert_float4(centroids[i]) - convert_float4(input[pixel_index]);
-			distxyz = distxyz * distxyz;
-			dist = distxyz.x + distxyz.y + distxyz.z;
-
-			if (dist < min_dist)
-			{ // prirazeni pixelu do noveho clusteru
-				min_dist = dist;
-				pixels[pixel_index] = i;
-			}
-		}
-
-		// konec pokud se pixel nepresunul, vzdalenost zustala stejna (tedy zadna zmena) a pokud se neprepocitavaji stredy
-		if (last_cluster == pixels[pixel_index] && last_dist == min_dist && !center_change)
+		for (uint i = 0; i < width * height; i++)
 		{
-			output[pixel_index] = centroids[pixels[pixel_index]];
-			output[pixel_index].w = 255;
-			return;
-		}
-
-		last_cluster = pixels[pixel_index];
-		last_dist = min_dist;
-		// pockame na zpracovani vsech pixelu
-		//barrier(CLK_GLOBAL_MEM_FENCE);
-
-		// poslani K vlaken na clustery -> prepocitani stredu
-		if (gidX < K && center_change)
-		{	// prumer hodnot
-			float4 sum = {0.0f, 0.0f, 0.0f, 0.0f};
-			uint num = 0;
-
-			for (uint i = 0; i < width * height; i++)
+			if (pixels[i] == center)
 			{
-				if (pixels[i] == gidX)
-				{
-					sum += convert_float4(input[i]);
-					num++;
-				}
-			}
-			// novy stred
-			uchar4 newCenter = convert_uchar4(sum / convert_float(num));
-
-			if (centroids[gidX].x != newCenter.x || centroids[gidX].y != newCenter.y || centroids[gidX].z != newCenter.z)
-			{
-				centroids[gidX] = newCenter;
-				centroids[gidX].w = 255;
-			}
-			else // stred se nezmenil
-			{
-				center_change = false;
+				sum += convert_float4(input[i]);
+				num++;
 			}
 		}
-		else // toto vlakno neprepocitava stredy
-		{
-			center_change = false;
-		}
 
-		//barrier(CLK_GLOBAL_MEM_FENCE);
+		uchar4 newCenter = convert_uchar4(sum / convert_float(num));
+
+		centroids[center] = newCenter;
+		centroids[center].w = 255;
 	}
 }
 
