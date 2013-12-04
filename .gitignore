@@ -16,12 +16,20 @@
 nbproject/
 src/gmu
 doc/gmu.pdf
+doc/slides.pdf
 *.tar.gz
 
 # Images (binary)
 *.png
 *.jpg
 *.jpeg
-/doc/gmu.out
-/doc/gmu.aux
-/doc/gmu.log
+doc/gmu.out
+doc/gmu.aux
+doc/gmu.log
+
+doc/slides.toc
+doc/slides.snm
+doc/slides.out
+doc/slides.nav
+doc/slides.log
+doc/slides.aux
