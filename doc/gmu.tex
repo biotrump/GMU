@@ -7,150 +7,145 @@
 %---------------------------------------------------------------------------
 \section{Zadání}
 
-Zde napište informace k zadání (nejde jen o přepis toho, co je na webu;
-komentujte vaše vlastní zpřesnění zadání, zaměření, důrazy, pojetí atd.). Text
-strukturujte, použijte odrážky, číslování$\ldots$
+Předmětem toho projektu je implementace segmentačních algoritmů k-means a mean-shift pomocí platformy OpenCL. Jelikož platforma OpenCL umožňuje spouštět obecné výpočty na výpočetním jádře grafické karty, zabývá se projekt především problematikou paralelizace algoritmů, kdežto kvalita výstupů je až na druhém místě.
 
-Rozsah: cca 10 odrážek
+Výsledná aplikace umožňuje spustit výpočet uvedených algoritmů nad libovolným grafickým vstupem a výsledek segmentace pak zobrazit na obrazovku. Důraz byl kladen na jednoduché spuštění, proto všechny parametry samotných metod (např. počet shluků u~k-means či velikost okna u~mean-shift) jsou nastaveny jako konstanty v~kódu samotného programu. Pro jejich změnu je nutné změnit kód a samozřejmě jej znovu přeložit.
+
+Program tak, jak je navržen, může v~budoucnu implementovat další spoustu segmentačních algoritmů a může sloužit jako demonstrační nástroj. Přidání dalších výpočetních částí je triviální.
+
+Samotný zdrojový kód je licencován licencí MIT (viz soubor LICENSE) a bude po odevzdaní veřejně uvolněn ve formě veřejného repositáře.
 
 %---------------------------------------------------------------------------
 \section{Použité technologie}
 \begin{itemize}
-  \item knihovna OpenCL
-  \item knihovna SDL (práce s okny a obrázky)
-  \item knihovna OpenCV  
+  \item \textbf{Knihovna OpenCL.} Program je zaměřen na implementaci na OpenCL. Z~tohod důvodu je nezbytné mít pro správný běh programu nejenom nainstalovány správně ovladače k~OpenCL, ale také mít podporovaný hardware. Pro překlad programu jsou pak třeba i hlavičkové soubory.
+  \item \textbf{Knihovna SDL a SDL-image.} Systém SDL řeší príci s~okny a obrázky. Pro překlad programu jsou pak třeba i hlavičková data.
 \end{itemize}
-Zde vypište, jaké technologie vaše řešení používá – co potřebuje k běhu, co
-jste použili při tvorbě, atd. Text strukturujte, použijte odrážky,
-číslování$\ldots$
 
-Rozsah: cca 7 odrážek
 
 %---------------------------------------------------------------------------
 \section{Použité zdroje}
+Zdroje použité v~rámci projektu jsou následující:
 \begin{itemize}
-  \item kostra programu, obrázky a soubory z 2. cvičení GMU
-  \item k-means clustering [http://en.wikipedia.org/wiki/K-means\_clustering]
+  \item \textbf{Kostra programu, obrázky a soubory z~2. cvičení GMU.} Na tomto programu byl náš projekt založen. A~to v~takové míře, že se stal výchozím bodem. Z~toho důvodu tyto dva programy sdílí velké množství kódu.
+  \item \textbf{K-means clustering [http://en.wikipedia.org/wiki/K-means\_clustering].} Referenční zdroj pro shlukování metodou k-means.
+  \item \textbf{Mean-shift clustering [http://en.wikipedia.org/wiki/Mean-shift].} Referenční zdroj pro shlukování metodou mean-shift.
 \end{itemize}
-Zde vypište, které zdroje jste použili k tvorbě: hotový kód, hotová data
-(obrázky, modely, $\ldots$), studijní materiály. Pokud vyplyne, že v projektu
-je použit kód nebo data, která nejsou uvedena tady, jedná se o závažný problém
-a projekt bude pravděpodobně hodnocen 0 body.
 
-Rozsah: potřebný počet odrážek
 
 %---------------------------------------------------------------------------
 \section{Nejdůležitější dosažené výsledky}
+V~případě obou algoritmů bylo dosaženo paralelizací velkého zrychlení. Jelikož bylo potřeba zrychlení správně změřit, rozhodli jsme se nepoužívat řešení z~jiných zdrojů (jako například OpenCV), neboť se interní implementace může velmi lišit a neporovnával by se běh paralelního zpracování a seriového, ale dvou různých implementací.
 
-Popište 3 věci, které jsou na vašem projektu nejlepší. Nejlépe ukažte a
-komentujte obrázky, v nejhorším případě vypište textově.
+Rozhodli jsme se tedy spustit v~obou případech (paralelní a seriové zpracovaní) v~rámci naší implementace OpenCL a to tak, že v~prvním případě bude vynuceno spuštění na CPU a v~druhém na GPU. Ani toto řešení však není optimální, neboť v~případě vícejádrového CPU bude implementace opět běžet paralelně, ale alespoň již porovnáváme běh na CPU a GPU.
+
+Výsledky jsou uvedeny níže v tabulce:
+
+\begin{center}
+    \begin{tabular}{| l || c | c | c | c |}
+    \hline
+       & \multicolumn{2}{c |}{K-means} & \multicolumn{2}{c |}{Mean-shift} \\
+      \hline
+      Run & CPU & GPU & CPU & GPU\\
+      \hline
+      0 & 20ms & ?ms & 20ms & ?ms\\
+      \hline
+      1 & 20ms & ?ms & 20ms & ?ms\\
+      \hline
+      2 & 20ms & ?ms & 20ms & ?ms\\
+      \hline
+    \end{tabular}
+\end{center}
+
+Z tabulky je patrné zrychlení implementace na GPU oproti CPU algoritmu k-means \textbf{X}-krát a algoritmu \textbf{Y}-krát.
+
+\begin{figure}[ht]
+    \minipage{0.3\textwidth}
+        \begin{center}
+            \includegraphics[width=4cm,keepaspectratio]{images/img.pdf}
+        \end{center}
+        \caption{Referenční obrázek}
+    \endminipage
+    \hfill
+    \minipage{0.3\textwidth}
+        \begin{center}
+            \includegraphics[width=4cm,keepaspectratio]{images/km.pdf}
+        \end{center}
+        \caption{K-means clustering}
+    \endminipage
+    \hfill
+    \minipage{0.3\textwidth}
+        \begin{center}
+            \includegraphics[width=4cm,keepaspectratio]{images/ms.pdf}
+        \end{center}
+        \caption{Mean-shift clustering}
+    \endminipage
+\end{figure}
+
 
 %---------------------------------------------------------------------------
 \section{Ovládání vytvořeného programu}
+Výsledný program má podobu konzolové aplikace pracující dávkově. Program po volbé parametrů při spuštění (viz níže) provede samotný výpočet a na obrazovku zobrazí výsledek. Aplikace vypne standardním stiskem \texttt{Esc} nebo \texttt{Q}.
+
+Spuštění programu s~parametry:
 \begin{itemize}
-  \item zpracování metodou k-means 
+  \item Zpracování metodou k-means 
     \begin{itemize}
-      \item[] {\tt ./gmu km}
+      \item[] \texttt{./gmu km FILE}
     \end{itemize}
-  \item zpracování metodou mean-shift
+  \item Zpracování metodou mean-shift
     \begin{itemize}
-      \item[] {\tt ./gmu ms}
+      \item[] \texttt{./gmu ms FILE}
     \end{itemize}
 \end{itemize}
-Stručně popište, jak se program ovládá (nejlépe odrážky rozdělené do
-kategorií). Pokud se ovládání odchyluje od zkratek a způsobů obvykle
-používaných v okýnkových nadstavbách operačních systémů, zdůvodněte, proč se
-tak děje.
+kde \texttt{FILE} odpovídá vstupnímu obrázku, který bude segmentován.
 
-Rozsah: potřebný počet odrážek
 
 %---------------------------------------------------------------------------
-\section{Zvláštní použité znalosti}
-
-Uveďte informace, které byly potřeba nad rámec výuky probírané na FIT.
-Vysvětlete je pomocí obrázků, schémat, vzorců apod. 
-
-Rozsah: podle potřeby 
-
-%---------------------------------------------------------------------------
-\section{Rozdělení práce v týmu}
-
+\section{Rozdělení práce v~týmu}
+Práce byla rozdělena mezi členy týmu následovně:
 \begin{itemize}
-\item Franta: udělal tohle, udělal tableto, ještě taky toto, vedl tým.
-\item Pepa: pracoval na tom, na tomhle a ještě na tomto.
-\item Mařenka: vytvořila tohle, tamto a ještě něco.
+\item Martin Šimon - algoritmus mean-shift, experimenty s~OpenCL
+\item Pavel Širůček - algoritmus k-means, optimalizace OpenCL
 \end{itemize}
-Pokud to bude vhodné, použijte odrážky místo souvislých vět.
 
-Rozsah: co nejstručnější tak, aby bylo zřejmé, jak byla dělena práce a za co v
-projektu je kdo zodpovědný.
+Práce v~týmu byla rozdělena rovnoměrně a to již na první společné konzultaci. Při tomto rozdělení jsme i zůstali. Části zde nezmíněné (dokumentace, návrh, apod.) byly výsledkem úzké spolupráce nás obou.
 
 %---------------------------------------------------------------------------
 \section{Co bylo nejpracnější}
-
-Popište, co vám při řešení nejvíce komplikovalo život, s čím jste se museli
-potýkat, co zabralo čas.
-
-Rozsah: 5-10 řádků
+Jako nejpracnější se ukázalo ladění samotných algoritmů, a to především kvůli netriviálnímu způsobu ladění paralelních systémů. Ke spokojenosti nepřispíval ani fakt rozdílných implementací OpenCL napříč různými platformami, což bylo problematické především u~starších strojů (soukromých). Samotná práce s~OpenCL a hledání vhodných parametrů paralelizace problém nezpůsobilo.
 
 %---------------------------------------------------------------------------
 \section{Zkušenosti získané řešením projektu}
-
-Popište, co jste se řešením projektu naučili. Zahrňte dovednosti obecně
-programátorské, věci z oblasti počítačové grafiky, ale i spolupráci v týmu,
-hospodaření s časem, atd.
-
-Rozsah: formulujte stručně, uchopte cca 3-5 věcí
+Projekt nám přinesl praktické zkušenosti z~řešení problematiky obecných výpočtů na grafické kartě za pomoci OpenCL. Nedílnou součástí bylo hluboké pochopení segmentačních algoritmů k-means a mean-shift. Prohloubení znalostí C/C+++ provází snad každý projekt, kde jsou tyto technologie použity.
 
 %---------------------------------------------------------------------------
 \section{Autoevaluace}
+\paragraph{Technický návrh (80\%):}
+Projekt celý je postaven na programu z~2. cvičení předmětu GMU 2013, tudíž byl technický návrh zaměřen na reálné řešení problematiky paralelizace algoritmů. Algoritmy byly empiricky paralelizovány se snahou o~co nejvyšší výsledný výkon, což na jednu stranu nebyl nejlepší přístup, ale na druhou stranu přinesl žádoucí akceleraci.
 
-Ohodnoťte vaše řešení v jednotlivých kategoriích (0 – nic neuděláno,
-zoufalství, 100\% – dokonalost sama). Projekt, který ve finále obdrží plný
-počet bodů, může mít složky hodnocené i hodně nízko. Uvedení hodnot blízkých
-100\% ve všech nebo mnoha kategoriích může ukazovat na nepochopení problematiky
-nebo na snahu kamuflovat slabé stránky projektu. Bodově hodnocena bude i
-schopnost vnímat silné a slabé stránky svého řešení.
+\paragraph{Programování (75\%):}
+Triviální znovupoužitelnost je ztížena neobjektivitou návrhu a práce s~OpenCL, na druhou stranu recyklace kernelů v~OpenCL je nasnadě. Program není plně odladěn, ostatně o~to nebyla ani přílišná snaha. Cílem bylo akcelerovat výpočty, což jsme také v~řešení vhodně demonstrovali.
 
-\paragraph{Technický návrh (50\%):} (analýza, dekompozice problému, volba
-vhodných prostředků, $\ldots$) 
-Stručně (1-2 řádky) komentujte hodnocení. 
+\paragraph{Vzhled vytvořeného řešení (65\%):}
+Aplikace je konzolová, krom zobrazení výsledku segmentace a průběžných výpisů na standardní vstup ani nic nevypisuje. Estetická kvalitě výsledků segmentace byla v~rámci řešení přiřazena nižší priorita, tudíž nebylo ani cílem, aby výsledky segmentace byly bezchybné.
 
-\paragraph{Programování (50\%):} (kvalita a čitelnost kódu, spolehlivost běhu,
-obecnost řešení, znovupoužitelnost, $\ldots$)
-Stručně (1-2 řádky) komentujte hodnocení. 
+\paragraph{Využití zdrojů (90\%):}
+Celý projekt je založen na (recyklovaném) programu z~2. cvičení předmětu GMU 2013 a algoritmy jsou implementovány podle referenčních vzorců. V~celém projektu pak až na vyjímky nebylo třeba vytvářet nové postupy řešení a tak byly zdroje využity takřka stoprocentně.
 
-\paragraph{Vzhled vytvořeného řešení (50\%):} (uvěřitelnost zobrazení,
-estetická kvalita, vhled GUI, $\ldots$)
-Stručně (1-2 řádky) komentujte hodnocení. 
+\paragraph{Hospodaření s~časem (95\%):}
+Práce na projektu začaly s~velkým předstihem, pracovalo se průběžně, výsledné řešení bylo hotovo několik dní před odevzdáním aniž bychom se dostali do časového tlaku.
 
-\paragraph{Využití zdrojů (50\%):} (využití existujícího kódu a dat, využití
-literatury, $\ldots$)
-Stručně (1-2 řádky) komentujte hodnocení. 
+\paragraph{Spolupráce v~týmu (95\%):}
+Komunikace v~týmu probíhala pravidelně, došlo na několik osobních konzultací a velkou výhodou bylo, že každý člen týmu měl přehled o~postupu a problémech dalšího člena týmu. K~plné spokojenosti jsme používali verzovací systém, několik elektronických komunikačních kanálů a již zmíněné osobní konzultace.
 
-\paragraph{Hospodaření s časem (50\%):} (rovnoměrné dotažení částí projektu,
-míra spěchu, chybějící části řešení, $\ldots$)
-Stručně (1-2 řádky) komentujte hodnocení. 
-
-\paragraph{Spolupráce v týmu (50\%):} (komunikace, dodržování dohod, vzájemné
-spolehnutí, rovnoměrnost, $\ldots$)
-Stručně (1-2 řádky) komentujte hodnocení. 
-
-\paragraph{Celkový dojem (50\%):} (pracnost, získané dovednosti, užitečnost,
-volba zadání, cokoliv, $\ldots$)
-Stručně (5-10 řádků) komentujte hodnocení. 
+\paragraph{Celkový dojem (80\%):}
+Zadání jsme zvolili jako takové, které požaduje implementaci obecného výpočtu na grafické kartě tak, jak bylo OpenCL navrženo. Domníváme se, že jsme zadání dodrželi a úspěšně dosáhli požadované akcelerace. Projekt nám také dal očekávané praktické znalosti o~obecných výpočtech na grafické kartě.
 
 %---------------------------------------------------------------------------
 \section{Doporučení pro budoucí zadávání projektů}
+Cílem bylo naučit se implementovat obecné výpošty na grafické kartě. Tento cíl byl dosažen, nicméně chvílemi nastávala situace, kdy implementace a dekompozice algoritmu (ne vzhledem k~paralelizaci) byla složitější než samotné využití paralelizačních mechanismů poskytovaných platformou OpenCL. Požadované algoritmy by měly být hloupé až naivní ve smyslu jednoduché implementace za cenu velkého vypočetního výkonu, aby nebylo těžké je implementovat a dosažené zrychlení bylo markantní.
 
-Co vám vyhovovalo a co nevyhovovalo na organizaci projektů? Které prvky by měly
-být zachovány, zesíleny, potlačeny, eliminovány?
-
-%---------------------------------------------------------------------------
-\section{Různé}
-
-Ještě něco by v dokumentaci mělo být? Napište to sem! Podle potřeby i založte
-novou kapitolu.
 
 \end{document}
 % vim:set ft=tex expandtab enc=utf8:
