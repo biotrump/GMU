@@ -18,7 +18,7 @@ ifeq ($(OS), Windows_NT)
 	COPY=copy
 else
 	CFLAGS=$(CFLAGS_COMMON) $(MOPENCL_FLAGS) `sdl-config --cflags` -I.
-	LIBS=`sdl-config --libs` -lSDL_image -lXmu -lX11 -lXi -L/usr/X11R6/lib $(MOPENCL_LIBS)
+	LIBS=`sdl-config --libs` -lSDL_image  $(MOPENCL_LIBS)
 	OUTPEXE=gmu
 	RM=rm -f
 	COPY=cp
