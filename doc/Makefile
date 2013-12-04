@@ -1,5 +1,6 @@
 NAME=gmu
 RM=rm -rf
+VLNA=vlna
 
 all: $(NAME).pdf
 
@@ -13,6 +14,7 @@ $(NAME).pdf: clean
 	pdflatex $(NAME)
 
 $(NAME).dvi: $(NAME).tex titlepage.tex
+	$(VLNA) $(NAME)
 	latex $(NAME)
 	latex $(NAME)
 
