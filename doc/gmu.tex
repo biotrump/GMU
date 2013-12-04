@@ -42,22 +42,16 @@ Rozhodli jsme se tedy spustit v~obou případech (paralelní a seriové zpracova
 Výsledky jsou uvedeny níže v tabulce:
 
 \begin{center}
-    \begin{tabular}{| l || c | c | c | c |}
+    \begin{tabular}{| c | c | c || c | c | c |}
     \hline
-       & \multicolumn{2}{c |}{K-means} & \multicolumn{2}{c |}{Mean-shift} \\
+      \multicolumn{3}{| c ||}{K-means} & \multicolumn{3}{ c |}{Mean-shift} \\
       \hline
-      Run & CPU & GPU & CPU & GPU\\
+      CPU & GPU & Akcelerace & CPU & GPU & Akcelerace\\
       \hline
-      0 & 20ms & ?ms & 20ms & ?ms\\
-      \hline
-      1 & 20ms & ?ms & 20ms & ?ms\\
-      \hline
-      2 & 20ms & ?ms & 20ms & ?ms\\
+      20ms & ?ms & ?x & 20ms & ?ms & ?x\\
       \hline
     \end{tabular}
 \end{center}
-
-Z tabulky je patrné zrychlení implementace na GPU oproti CPU algoritmu k-means \textbf{X}-krát a algoritmu \textbf{Y}-krát.
 
 \begin{figure}[ht]
     \minipage{0.3\textwidth}
