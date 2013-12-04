@@ -11,15 +11,15 @@ Předmětem toho projektu je implementace segmentačních algoritmů k-means a m
 
 Výsledná aplikace umožňuje spustit výpočet uvedených algoritmů nad libovolným grafickým vstupem a výsledek segmentace pak zobrazit na obrazovku. Důraz byl kladen na jednoduché spuštění, proto všechny parametry samotných metod (např. počet shluků u~k-means či velikost okna u~mean-shift) jsou nastaveny jako konstanty v~kódu samotného programu. Pro jejich změnu je nutné změnit kód a samozřejmě jej znovu přeložit.
 
-Program tak, jak je navržen, může v~budoucnu implementovat další spoustu segmentačních algoritmů a může sloužit jako demonstrační nástroj. Přidání dalších výpočetních částí je triviální.
+Program tak, jak je navržen, může v~budoucnu implementovat spoustu dalších segmentačních algoritmů a může sloužit jako demonstrační nástroj. Přidání dalších výpočetních částí je triviální.
 
 Samotný zdrojový kód je licencován licencí MIT (viz soubor LICENSE) a bude po odevzdaní veřejně uvolněn ve formě veřejného repositáře.
 
 %---------------------------------------------------------------------------
 \section{Použité technologie}
 \begin{itemize}
-  \item \textbf{Knihovna OpenCL.} Program je zaměřen na implementaci na OpenCL. Z~tohod důvodu je nezbytné mít pro správný běh programu nejenom nainstalovány správně ovladače k~OpenCL, ale také mít podporovaný hardware. Pro překlad programu jsou pak třeba i hlavičkové soubory.
-  \item \textbf{Knihovna SDL a SDL-image.} Systém SDL řeší príci s~okny a obrázky. Pro překlad programu jsou pak třeba i hlavičková data.
+  \item \textbf{Knihovna OpenCL.} Program je zaměřen na implementaci na OpenCL. Z~tohoto důvodu je nezbytné mít pro správný běh programu nejenom nainstalovány správně ovladače k~OpenCL, ale také mít podporovaný hardware. Pro překlad programu jsou pak třeba i hlavičkové soubory.
+  \item \textbf{Knihovna SDL a SDL-image.} Systém SDL řeší práci s~okny a obrázky. Pro překlad programu jsou pak třeba i hlavičková data.
 \end{itemize}
 
 
@@ -79,7 +79,7 @@ Výsledky jsou uvedeny níže v tabulce:
 
 %---------------------------------------------------------------------------
 \section{Ovládání vytvořeného programu}
-Výsledný program má podobu konzolové aplikace pracující dávkově. Program po volbé parametrů při spuštění (viz níže) provede samotný výpočet a na obrazovku zobrazí výsledek. Aplikace vypne standardním stiskem \texttt{Esc} nebo \texttt{Q}.
+Výsledný program má podobu konzolové aplikace pracující dávkově. Program po volbě parametrů při spuštění (viz níže) provede samotný výpočet a na obrazovku zobrazí výsledek. Aplikace se vypne standardním stiskem \texttt{Esc} nebo \texttt{Q}.
 
 Spuštění programu s~parametry:
 \begin{itemize}
@@ -111,7 +111,7 @@ Jako nejpracnější se ukázalo ladění samotných algoritmů, a to předevš�
 
 %---------------------------------------------------------------------------
 \section{Zkušenosti získané řešením projektu}
-Projekt nám přinesl praktické zkušenosti z~řešení problematiky obecných výpočtů na grafické kartě za pomoci OpenCL. Nedílnou součástí bylo hluboké pochopení segmentačních algoritmů k-means a mean-shift. Prohloubení znalostí C/C+++ provází snad každý projekt, kde jsou tyto technologie použity.
+Projekt nám přinesl praktické zkušenosti z~řešení problematiky obecných výpočtů na grafické kartě za pomoci OpenCL. Nedílnou součástí bylo hluboké pochopení segmentačních algoritmů k-means a mean-shift. Prohloubení znalostí C/C++ provází snad každý projekt, kde jsou tyto technologie použity.
 
 %---------------------------------------------------------------------------
 \section{Autoevaluace}
@@ -122,7 +122,7 @@ Projekt celý je postaven na programu z~2. cvičení předmětu GMU 2013, tudí�
 Triviální znovupoužitelnost je ztížena neobjektivitou návrhu a práce s~OpenCL, na druhou stranu recyklace kernelů v~OpenCL je nasnadě. Program není plně odladěn, ostatně o~to nebyla ani přílišná snaha. Cílem bylo akcelerovat výpočty, což jsme také v~řešení vhodně demonstrovali.
 
 \paragraph{Vzhled vytvořeného řešení (65\%):}
-Aplikace je konzolová, krom zobrazení výsledku segmentace a průběžných výpisů na standardní vstup ani nic nevypisuje. Estetická kvalitě výsledků segmentace byla v~rámci řešení přiřazena nižší priorita, tudíž nebylo ani cílem, aby výsledky segmentace byly bezchybné.
+Aplikace je konzolová, krom zobrazení výsledku segmentace a průběžných výpisů na standardní vstup ani nic nevypisuje. Estetické kvalitě výsledků segmentace byla v~rámci řešení přiřazena nižší priorita, tudíž nebylo ani cílem, aby výsledky segmentace byly bezchybné.
 
 \paragraph{Využití zdrojů (90\%):}
 Celý projekt je založen na (recyklovaném) programu z~2. cvičení předmětu GMU 2013 a algoritmy jsou implementovány podle referenčních vzorců. V~celém projektu pak až na vyjímky nebylo třeba vytvářet nové postupy řešení a tak byly zdroje využity takřka stoprocentně.
@@ -138,7 +138,7 @@ Zadání jsme zvolili jako takové, které požaduje implementaci obecného výp
 
 %---------------------------------------------------------------------------
 \section{Doporučení pro budoucí zadávání projektů}
-Cílem bylo naučit se implementovat obecné výpošty na grafické kartě. Tento cíl byl dosažen, nicméně chvílemi nastávala situace, kdy implementace a dekompozice algoritmu (ne vzhledem k~paralelizaci) byla složitější než samotné využití paralelizačních mechanismů poskytovaných platformou OpenCL. Požadované algoritmy by měly být hloupé až naivní ve smyslu jednoduché implementace za cenu velkého vypočetního výkonu, aby nebylo těžké je implementovat a dosažené zrychlení bylo markantní.
+Cílem bylo naučit se implementovat obecné výpočty na grafické kartě. Tento cíl byl dosažen, nicméně chvílemi nastávala situace, kdy implementace a dekompozice algoritmu (ne vzhledem k~paralelizaci) byla složitější než samotné využití paralelizačních mechanismů poskytovaných platformou OpenCL. Požadované algoritmy by měly být hloupé až naivní ve smyslu jednoduché implementace za cenu velkého vypočetního výkonu, aby nebylo těžké je implementovat a dosažené zrychlení bylo markantní.
 
 
 \end{document}
