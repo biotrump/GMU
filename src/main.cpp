@@ -38,7 +38,11 @@ int algorithm; //used algorithm
 
 //width and height of the image
 int width = 0, height = 0;
+
+/* Pocet stredu */
 int K = 16;
+
+/* Sekvencni vypocet na CPU (kmeans) */
 const bool CPU = false;
 
 cl_uint pixelSize = 32; //rgba 8bits per channel
@@ -71,6 +75,8 @@ cl_uint *pixels;
 size_t kernelWorkGroupSize = 1024;
 size_t blockSizeX = 1024;
 size_t blockSizeY = 1;
+
+size_t maxWorkGroup;
 
 /* Size of mean-shift window */
 int msWinSize = 25;
@@ -364,6 +370,15 @@ int setupCL()
     };
 
 
+	//maxWorkGroupSize
+	int wgSizeTmp;
+	clGetDeviceInfo(cdDevices[deviceIndex], CL_DEVICE_MAX_WORK_GROUP_SIZE, sizeof (size_t), &wgSizeTmp, NULL);
+
+	while (width % wgSizeTmp != 0)
+	{
+		wgSizeTmp--;
+	}
+	maxWorkGroup = wgSizeTmp;
 
     //create context
     context = clCreateContext(cps, 1, &cdDevices[deviceIndex], NULL, NULL, &ciErr);
@@ -689,7 +704,7 @@ int runKMeansKernels()
 			//the global number of threads in each dimension has to be divisible
 			// by the local dimension numbers
 			size_t globalThreadsPixels[] = {width, height};
-			size_t localThreadsPixels[] = {width, 1};
+			size_t localThreadsPixels[] = {maxWorkGroup, 1};
 
 
 			/* input buffer */
@@ -747,7 +762,7 @@ int runKMeansKernels()
 
 
 		//////////////////////////////////////////////////////////////////////////////////////////////////
-		printTiming(event_assignCentroids, "K-means Result: ");
+		//printTiming(event_assignCentroids, "K-means Result: ");
 
 		//Read back the image - if textures were used for showing this wouldn't be necessary
 		//blocking read
@@ -757,7 +772,8 @@ int runKMeansKernels()
 		t_end = GetTime();
 	} // else - zpracovani v OpenCL
 
-	printf("Vypocet: %fs\n", t_end - t_start);
+	//printf("WorkGroupSize: %d\n", maxWorkGroup);
+	printf("Time: %fs\n", t_end - t_start);
 
     return 0;
 }
@@ -769,6 +785,9 @@ int runKMeansKernels()
  */
 int runMeanShiftKernels()
 {
+	double t_start, t_end;
+	t_start= GetTime();
+
 	int status;
     cl_event event_meanshift;
 
@@ -795,7 +814,7 @@ int runMeanShiftKernels()
 
     /* Kernel enqueue */
     size_t globalThreadsMeanshift[] = {width, height};
-    size_t localThreadsMeanshift[] = {width, 1};
+	size_t localThreadsMeanshift[] = {maxWorkGroup, 1};
 
     status = clEnqueueNDRangeKernel(commandQueue,
                                     meanshift,
@@ -829,6 +848,11 @@ int runMeanShiftKernels()
                                  0);
 
     CheckOpenCLError(status, "read output.");
+
+	t_end = GetTime();
+
+	//printf("WorkGroupSize: %d\n", maxWorkGroup);
+	printf("Time: %fs\n", t_end - t_start);
 
     return 0;
 }

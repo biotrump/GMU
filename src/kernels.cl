@@ -159,9 +159,9 @@ __kernel void meanshift(__global uchar4* input, uint width, uint height, uint wi
         wxmax = convert_int_rte(actx) + ((winsize-1) / 2) + 1;
         wxmin = convert_int_rte(actx) - ((winsize-1) / 2);
 
-        if(fabs(oldx - actx) < 0.1)
+        if(fabs(oldx - actx) < 0.1f)
         {
-            if(fabs(oldy - acty) < 0.1)
+            if(fabs(oldy - acty) < 0.1f)
             {
                 //the step is lower set
                 break;
