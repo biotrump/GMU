@@ -68,7 +68,7 @@ __kernel void recomputeCenters(__global uchar4* input, __global uchar4* centroid
 }
 
 
-__kernel void ms_begin(__global uchar4* input, uint width, uint height, uint winsize, __global uchar4* output)
+__kernel void meanshift(__global uchar4* input, uint width, uint height, uint winsize, __global uchar4* output)
 {
     int x = get_global_id(0);
     int y = get_global_id(1);

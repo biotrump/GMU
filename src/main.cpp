@@ -374,19 +374,6 @@ int setupCL()
                                          &ciErr);
     CheckOpenCLError(ciErr, "Allocate output buffer");
 
-    //    ciErr = clEnqueueWriteBuffer(commandQueue,
-    //                                 d_outputImageBuffer,
-    //                                 CL_TRUE, //blocking write
-    //                                 0,
-    //                                 width * height * sizeof (cl_uchar4),
-    //                                 h_inputImageData,
-    //                                 0,
-    //                                 0,
-    //                                 0);
-    //
-    //    CheckOpenCLError(ciErr, "Copy output image data");
-
-
     //create mid buffers dependind on algorithm
     if (algorithm == B_KMEANS)
     {
@@ -420,7 +407,6 @@ int setupCL()
                                      0);
 
         CheckOpenCLError(ciErr, "Copy centroids buffer data (k-means)");
-        //delete [] centers;
     }
 
 
@@ -514,8 +500,8 @@ int setupCL()
     {
         /* ================================================================== */
         /* Mean-shift section */
-        meanshift = clCreateKernel(program, "ms_begin", &ciErr);
-        CheckOpenCLError(ciErr, "clCreateKernel ms_begin");
+        meanshift = clCreateKernel(program, "meanshift", &ciErr);
+        CheckOpenCLError(ciErr, "clCreateKernel meanshift");
 
         // Check group size against group size returned by kernel
         ciErr = clGetKernelWorkGroupInfo(meanshift,
@@ -618,7 +604,7 @@ int runKMeansKernels()
 		size_t localThreadsCenters = 1;
 
 	while (centers_move)
-	{		
+	{
 		status = clEnqueueNDRangeKernel(commandQueue, assignCentroids, 2, NULL, globalThreadsPixels,	localThreadsPixels,	0, NULL, &event_assignCentroids);
 		CheckOpenCLError(status, "clEnqueueNDRangeKernel assignCentroids.");
 		status = clWaitForEvents(1, &event_assignCentroids);
@@ -630,7 +616,7 @@ int runKMeansKernels()
 		status = clWaitForEvents(1, &event_recomputeCenters);
 		CheckOpenCLError(status, "clWaitForEvents recompute centers.");
 
-		// kopie starych hodnot centroidu		
+		// kopie starych hodnot centroidu
 		memcpy(oldCenters, centers, K * sizeof(cl_uchar4));
 
 		status = clEnqueueReadBuffer(commandQueue, d_centroids, CL_TRUE, 0, K * sizeof(cl_uchar4), centers, 0, 0, 0);
@@ -672,53 +658,38 @@ int runMeanShiftKernels()
 
     /* Setup arguments to the kernel */
 
-    status = clSetKernelArg(meanshift,
-            0,
-            sizeof (cl_mem),
-            &d_inputImageBuffer);
+    status = clSetKernelArg(meanshift, 0, sizeof (cl_mem), &d_inputImageBuffer);
     CheckOpenCLError(status, "clSetKernelArg. (inputImage)");
 
     /* image width */
-    status = clSetKernelArg(meanshift,
-                            1,
-            sizeof (cl_uint),
-            &width);
+    status = clSetKernelArg(meanshift, 1, sizeof (cl_uint), &width);
     CheckOpenCLError(status, "clSetKernelArg. (width)");
 
     /* image height */
-    status = clSetKernelArg(meanshift,
-                            2,
-            sizeof (cl_uint),
-            &height);
+    status = clSetKernelArg(meanshift, 2, sizeof (cl_uint), &height);
     CheckOpenCLError(status, "clSetKernelArg. (height)");
 
     /* window size */
-    status = clSetKernelArg(meanshift,
-                            3,
-            sizeof (cl_uint),
-            &msWinSize);
+    status = clSetKernelArg(meanshift, 3, sizeof (cl_uint), &msWinSize);
     CheckOpenCLError(status, "clSetKernelArg. (msWinSize)");
 
     /* output buffer */
-    status = clSetKernelArg(meanshift,
-                            4,
-                            sizeof (cl_mem),
-                            &d_outputImageBuffer);
+    status = clSetKernelArg(meanshift, 4, sizeof (cl_mem), &d_outputImageBuffer);
     CheckOpenCLError(status, "clSetKernelArg. (outputImageBuffer)");
 
     /* Kernel enqueue */
-    size_t globalThreadsMSBegin[] = {width, height};
-    size_t localThreadsMSBegin[] = {width, 1};
+    size_t globalThreadsMeanshift[] = {width, height};
+    size_t localThreadsMeanshift[] = {width, 1};
 
     status = clEnqueueNDRangeKernel(commandQueue,
-            meanshift,
-            2,
-            NULL, //offset
-            globalThreadsMSBegin,
-            localThreadsMSBegin,
-            0,
-            NULL,
-            &event_meanshift);
+                                    meanshift,
+                                    2,
+                                    NULL,
+                                    globalThreadsMeanshift,
+                                    localThreadsMeanshift,
+                                    0,
+                                    NULL,
+                                    &event_meanshift);
     CheckOpenCLError(status, "clEnqueueNDRangeKernel meanshift.");
 
     status = clWaitForEvents(1, &event_meanshift);
