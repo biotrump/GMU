@@ -45,10 +45,10 @@ Výsledky jsou uvedeny níže v tabulce:
     \begin{tabular}{| c | c | c | c | c | c | c |}
       \multicolumn{7}{ c }{K-means} \\
       \hline
-      Obrázek & K & C2D E6850 & skolni CPU & skolni GPU & HD 4870 & Akcelerace \\
+      Obrázek   &  K  & C2D E6850 (CPU) & Intel i7 (CPU) & NVIDIA GT218M (GPU) & HD 4870 (GPU) & Akcelerace \\
       \hline
-      512x512 & 16 & 1.889 s & X s & X s & 0.604 s & X krát \\
-      1920x1200 & 128 & 13.688 s & X s & X s & 5.195 s & X krát \\
+      512x512   & 16  &     1.889 s     &     0.103 s    &        0.548 s      &    0.604 s    & X krát \\
+      1920x1200 & 128 &    13.688 s     &     5.655 s    &        N/A s        &    5.195 s    & X krát \\
       \hline
     \end{tabular}
 \end{center}
@@ -56,10 +56,9 @@ Výsledky jsou uvedeny níže v tabulce:
     \begin{tabular}{| c | c | c | c | c | c | c |}
       \multicolumn{7}{ c }{Mean-shift} \\
       \hline
-      Obrázek & Velikost okna & C2D E6850 & skolni CPU & skolni GPU & HD 4870 & Akcelerace \\
+      Obrázek & Velikost okna & C2D E6850 (CPU) & Intel i7 (CPU) & NVIDIA GT218M (GPU) & HD 4870 (GPU) & Akcelerace \\
       \hline
-      128x128 & 25 & 1.837 s & X s & X s & 0.465 s & X krát \\
-      xxx & 25 & X s & X s & X s & spadlo & X krát \\
+      128x128 &      25       &      1.837 s    &     4.142 s    &      2.310 s        &    0.465 s    & X krát \\
       \hline
     \end{tabular}
 \end{center}
