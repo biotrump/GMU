@@ -6,10 +6,8 @@
  */
 
 
- /* TODO - velke obrazky, zpracuje se cast..problem bude nekde u maximalniho poctu vlaken nebo tak
-         - artefakty u nejakych obrazku, pripadne jednou to zpracuje dobre, podruhe podivne - zpusobeno barierami
-		 - zadani parametru K z cmdl, omezeni na max napr 16.
-		 - doladit (nekonceny cyklus napr, detekce zmeny clsuteru apod.) (?)
+ /*
+ * Prirazeni pixelu ke stredum.
  */
 __kernel void assignCentroids(__global uchar4* input, __global uchar4* output, __global uchar4* centroids, __global uint* pixels, uint width, uint height, uint K)
 {
@@ -28,8 +26,9 @@ __kernel void assignCentroids(__global uchar4* input, __global uchar4* output, _
 		distxyz = distxyz * distxyz;
 		dist = distxyz.x + distxyz.y + distxyz.z;
 
+		// mensi vzdalenost? - priradime stred
 		if (dist < min_dist)
-		{ // prirazeni pixelu do noveho clusteru
+		{
 			min_dist = dist;
 			pixels[pixel_index] = i;
 		}
@@ -51,6 +50,7 @@ __kernel void recomputeCenters(__global uchar4* input, __global uchar4* centroid
 		float4 sum = {0.0f, 0.0f, 0.0f, 0.0f};
 		uint num = 0;
 
+		// zprumerovani stredu pixelu a vytvoreni noveho stredu
 		for (uint i = 0; i < width * height; i++)
 		{
 			if (pixels[i] == center)

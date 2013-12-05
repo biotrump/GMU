@@ -9,6 +9,12 @@
 #include <iostream>
 #include <vector>
 
+#ifdef _WIN32
+#include <windows.h>
+#else
+#include <sys/time.h>
+#endif //WIN32
+
 #pragma comment( lib, "OpenCL" )
 #pragma comment( lib, "SDL" )
 #pragma comment( lib, "SDLmain" )
@@ -32,7 +38,8 @@ int algorithm; //used algorithm
 
 //width and height of the image
 int width = 0, height = 0;
-int K = 8;
+int K = 16;
+const bool CPU = false;
 
 cl_uint pixelSize = 32; //rgba 8bits per channel
 
@@ -84,6 +91,34 @@ void generateCenters(int K, cl_uchar4* centers)
     }
 }
 
+double GetTime(void)
+{
+#if _WIN32  															/* toto jede na Windows */
+    static int initialized = 0;
+    static LARGE_INTEGER frequency;
+    LARGE_INTEGER value;
+
+    if (!initialized) {                         							/* prvni volani */
+        initialized = 1;
+        if (QueryPerformanceFrequency(&frequency) == 0) {                   /* pokud hi-res pocitadlo neni podporovano */
+            //assert(0 && "HiRes timer is not available.");
+            exit(-1);
+        }
+    }
+
+    //assert(QueryPerformanceCounter(&value) != 0 && "This should never happen.");  /* osetreni chyby */
+    QueryPerformanceCounter(&value);
+    return (double)value.QuadPart / (double)frequency.QuadPart;  			/* vrat hodnotu v sekundach */
+
+#else                                         							/* toto jede na Linux/Unixovych systemech */
+    struct timeval tv;
+    if (gettimeofday(&tv, NULL) == -1) {        							/* vezmi cas */
+        //assert(0 && "gettimeofday does not work.");  						/* osetri chyby */
+        exit(-2);
+    }
+    return (double)tv.tv_sec + (double)tv.tv_usec/1000000.;  				/* vrat cas v sekundach */
+#endif
+}
 
 int printTiming(cl_event event, const char* title)
 {
@@ -295,7 +330,7 @@ int setupCL()
                          cdtTmp & CL_DEVICE_TYPE_ACCELERATOR ? "ACCELERATOR," : "",
                          cdtTmp & CL_DEVICE_TYPE_DEFAULT ? "DEFAULT," : "");
 
-        if (cdtTmp & CL_DEVICE_TYPE_CPU)
+        if (cdtTmp & CL_DEVICE_TYPE_GPU)
         { //prioritize gpu if both cpu and gpu are available
             deviceIndex = f0;
         }
@@ -555,107 +590,188 @@ int setupCL()
  */
 int runKMeansKernels()
 {
-    int status;
-    cl_event event_assignCentroids, event_recomputeCenters;
+	double t_start, t_end;
 
-    /* Setup arguments to the kernel */
-
-    //////////////////////////////////////////////////////////////////////////////////////////////////
-    // Kernel assignCentroids
-	bool centers_move = true;
-	cl_uchar4 *oldCenters = new cl_uchar4[K];
-
-	/* input buffer */
-		status = clSetKernelArg(assignCentroids, 0, sizeof (cl_mem), &d_inputImageBuffer);
-		CheckOpenCLError(status, "clSetKernelArg. assignCentroids (inputImage)");
-		/* output buffer */
-		status = clSetKernelArg(assignCentroids, 1, sizeof (cl_mem), &d_outputImageBuffer);
-		CheckOpenCLError(status, "clSetKernelArg. assignCentroids (uotputImage)");
-		/* buffer centroidu */
-		status = clSetKernelArg(assignCentroids, 2, sizeof (cl_mem), &d_centroids);
-		CheckOpenCLError(status, "clSetKernelArg. assignCentroids (centroids)");
-		/* image pixelu a jejich naleyitosti k centroidum */
-		status = clSetKernelArg(assignCentroids, 3, sizeof (cl_mem), &d_pixels);
-		CheckOpenCLError(status, "clSetKernelArg. assignCentroids (pixels)");
-		/* image width */
-		status = clSetKernelArg(assignCentroids, 4, sizeof (cl_uint), &width);
-		CheckOpenCLError(status, "clSetKernelArg. assignCentroids (width)");
-		/* image height */
-		status = clSetKernelArg(assignCentroids, 5, sizeof (cl_uint), &height);
-		CheckOpenCLError(status, "clSetKernelArg. assignCentroids (height)");
-		/* K */
-		status = clSetKernelArg(assignCentroids, 6, sizeof (cl_uint), &K);
-		CheckOpenCLError(status, "clSetKernelArg. assignCentroids (K)");
-
-		//the global number of threads in each dimension has to be divisible
-		// by the local dimension numbers
-		size_t globalThreadsPixels[] = {width, height};
-		size_t localThreadsPixels[] = {width, 1};
-
-
-		/* input buffer */
-		status = clSetKernelArg(recomputeCenters, 0, sizeof (cl_mem), &d_inputImageBuffer);
-		CheckOpenCLError(status, "clSetKernelArg. recomputeCenters (inputImage)");
-		/* buffer centroidu */
-		status = clSetKernelArg(recomputeCenters, 1, sizeof (cl_mem), &d_centroids);
-		CheckOpenCLError(status, "clSetKernelArg. recomputeCenters (centroids)");
-		/* image pixelu a jejich naleyitosti k centroidum */
-		status = clSetKernelArg(recomputeCenters, 2, sizeof (cl_mem), &d_pixels);
-		CheckOpenCLError(status, "clSetKernelArg. recomputeCenters (pixels)");
-		/* image width */
-		status = clSetKernelArg(recomputeCenters, 3, sizeof (cl_uint), &width);
-		CheckOpenCLError(status, "clSetKernelArg. recomputeCenters (width)");
-		/* image height */
-		status = clSetKernelArg(recomputeCenters, 4, sizeof (cl_uint), &height);
-		CheckOpenCLError(status, "clSetKernelArg. recomputeCenters (height)");
-		/* K */
-		status = clSetKernelArg(recomputeCenters, 5, sizeof (cl_uint), &K);
-		CheckOpenCLError(status, "clSetKernelArg. recomputeCenters (K)");
-
-		//the global number of threads in each dimension has to be divisible
-		// by the local dimension numbers
-		size_t globalThreadsCenters = K;
-		size_t localThreadsCenters = 1;
-
-	while (centers_move)
-	{		
-		status = clEnqueueNDRangeKernel(commandQueue, assignCentroids, 2, NULL, globalThreadsPixels,	localThreadsPixels,	0, NULL, &event_assignCentroids);
-		CheckOpenCLError(status, "clEnqueueNDRangeKernel assignCentroids.");
-		status = clWaitForEvents(1, &event_assignCentroids);
-		CheckOpenCLError(status, "clWaitForEvents assignCentroids.");
-
-
-		status = clEnqueueNDRangeKernel(commandQueue, recomputeCenters, 1, NULL, &globalThreadsCenters, &localThreadsCenters, 1, &event_assignCentroids, &event_recomputeCenters);
-		CheckOpenCLError(status, "clEnqueueNDRangeKernel recomputeCenters.");
-		status = clWaitForEvents(1, &event_recomputeCenters);
-		CheckOpenCLError(status, "clWaitForEvents recompute centers.");
-
-		// kopie starych hodnot centroidu		
-		memcpy(oldCenters, centers, K * sizeof(cl_uchar4));
-
-		status = clEnqueueReadBuffer(commandQueue, d_centroids, CL_TRUE, 0, K * sizeof(cl_uchar4), centers, 0, 0, 0);
-		CheckOpenCLError(status, "read new centers.");
-
-		// porovname stare a nove stredy, pokud se nezmenily, tak koncime
-		for (int i = 0; i < K; i++)
-		{
-			if (oldCenters[i].s[0] == centers[i].s[0] &&
-				oldCenters[i].s[1] == centers[i].s[1] &&
-				oldCenters[i].s[2] == centers[i].s[2])
+	if (CPU)
+	{
+		t_start = GetTime();
+		// cpu_implementation
+		bool cent_move = true;
+		while (cent_move)
+		{		
+			// prirazeni ke stredum
+			for (unsigned index = 0; index < width * height; index++)
 			{
-				centers_move = false;
+				float min_dist = 1000000.0f;
+				for (int cent = 0; cent < K; cent++)
+				{
+					cl_float4 distRGB = {0.0f, 0.0f, 0.0f, 0.0f};
+					float dist = 0.0f;
+
+					distRGB.s[0] = float(centers[cent].s[0]) - float(h_inputImageData[index].s[0]);
+					distRGB.s[0] = distRGB.s[0] * distRGB.s[0];
+
+					distRGB.s[1] = float(centers[cent].s[1]) - float(h_inputImageData[index].s[1]);
+					distRGB.s[1] = distRGB.s[1] * distRGB.s[1];
+
+					distRGB.s[2] = float(centers[cent].s[2]) - float(h_inputImageData[index].s[2]);
+					distRGB.s[2] = distRGB.s[2] * distRGB.s[2];
+
+					dist = distRGB.s[0] + distRGB.s[1] + distRGB.s[2];
+
+					if (dist < min_dist)
+					{
+						min_dist = dist;
+						pixels[index] = cent;
+					}
+				}
+				h_outputImageData[index] = centers[pixels[index]];
+				h_outputImageData[index].s[3] = 255;
+			}
+
+			// prepocitani stredu
+			for (int cent = 0; cent < K; cent++)
+			{
+				cl_float4 sum = {0.0f, 0.0f, 0.0f, 0.0f};
+				unsigned num = 0;
+				cl_uchar4 newCenter;
+
+				for (unsigned index = 0; index < width * height; index++)
+				{
+					if (pixels[index] == cent)
+					{
+						sum.s[0] += float(h_inputImageData[index].s[0]);
+						sum.s[1] += float(h_inputImageData[index].s[1]);
+						sum.s[2] += float(h_inputImageData[index].s[2]);
+						num++;
+					}
+				}
+
+				newCenter.s[0] = cl_uchar(sum.s[0] / float(num));
+				newCenter.s[1] = cl_uchar(sum.s[1] / float(num));
+				newCenter.s[2] = cl_uchar(sum.s[2] / float(num));
+				newCenter.s[3] = 255;
+
+				if (newCenter.s[0] == centers[cent].s[0] && newCenter.s[1] == centers[cent].s[1] && newCenter.s[2] == centers[cent].s[2])
+				{
+					cent_move = false;
+				}
+				else
+				{
+					centers[cent] = newCenter;
+					cent_move = true;
+				}
 			}
 		}
-	} // while
+		t_end = GetTime();
+	}
+	else
+	{
+		t_start= GetTime();
+		int status;
+		cl_event event_assignCentroids, event_recomputeCenters;
+
+		/* Setup arguments to the kernel */
+
+		//////////////////////////////////////////////////////////////////////////////////////////////////
+		// Kernel assignCentroids
+		bool centers_move = true;
+		cl_uchar4 *oldCenters = new cl_uchar4[K];
+
+		/* input buffer */
+			status = clSetKernelArg(assignCentroids, 0, sizeof (cl_mem), &d_inputImageBuffer);
+			CheckOpenCLError(status, "clSetKernelArg. assignCentroids (inputImage)");
+			/* output buffer */
+			status = clSetKernelArg(assignCentroids, 1, sizeof (cl_mem), &d_outputImageBuffer);
+			CheckOpenCLError(status, "clSetKernelArg. assignCentroids (uotputImage)");
+			/* buffer centroidu */
+			status = clSetKernelArg(assignCentroids, 2, sizeof (cl_mem), &d_centroids);
+			CheckOpenCLError(status, "clSetKernelArg. assignCentroids (centroids)");
+			/* image pixelu a jejich naleyitosti k centroidum */
+			status = clSetKernelArg(assignCentroids, 3, sizeof (cl_mem), &d_pixels);
+			CheckOpenCLError(status, "clSetKernelArg. assignCentroids (pixels)");
+			/* image width */
+			status = clSetKernelArg(assignCentroids, 4, sizeof (cl_uint), &width);
+			CheckOpenCLError(status, "clSetKernelArg. assignCentroids (width)");
+			/* image height */
+			status = clSetKernelArg(assignCentroids, 5, sizeof (cl_uint), &height);
+			CheckOpenCLError(status, "clSetKernelArg. assignCentroids (height)");
+			/* K */
+			status = clSetKernelArg(assignCentroids, 6, sizeof (cl_uint), &K);
+			CheckOpenCLError(status, "clSetKernelArg. assignCentroids (K)");
+
+			//the global number of threads in each dimension has to be divisible
+			// by the local dimension numbers
+			size_t globalThreadsPixels[] = {width, height};
+			size_t localThreadsPixels[] = {width, 1};
 
 
-    //////////////////////////////////////////////////////////////////////////////////////////////////
-    printTiming(event_assignCentroids, "K-means Result: ");
+			/* input buffer */
+			status = clSetKernelArg(recomputeCenters, 0, sizeof (cl_mem), &d_inputImageBuffer);
+			CheckOpenCLError(status, "clSetKernelArg. recomputeCenters (inputImage)");
+			/* buffer centroidu */
+			status = clSetKernelArg(recomputeCenters, 1, sizeof (cl_mem), &d_centroids);
+			CheckOpenCLError(status, "clSetKernelArg. recomputeCenters (centroids)");
+			/* image pixelu a jejich naleyitosti k centroidum */
+			status = clSetKernelArg(recomputeCenters, 2, sizeof (cl_mem), &d_pixels);
+			CheckOpenCLError(status, "clSetKernelArg. recomputeCenters (pixels)");
+			/* image width */
+			status = clSetKernelArg(recomputeCenters, 3, sizeof (cl_uint), &width);
+			CheckOpenCLError(status, "clSetKernelArg. recomputeCenters (width)");
+			/* image height */
+			status = clSetKernelArg(recomputeCenters, 4, sizeof (cl_uint), &height);
+			CheckOpenCLError(status, "clSetKernelArg. recomputeCenters (height)");
+			/* K */
+			status = clSetKernelArg(recomputeCenters, 5, sizeof (cl_uint), &K);
+			CheckOpenCLError(status, "clSetKernelArg. recomputeCenters (K)");
 
-    //Read back the image - if textures were used for showing this wouldn't be necessary
-    //blocking read
-    status = clEnqueueReadBuffer(commandQueue, d_outputImageBuffer, CL_TRUE, 0, width * height * sizeof (cl_uchar4), h_outputImageData, 0, 0, 0);
-    CheckOpenCLError(status, "read output.");
+			//the global number of threads in each dimension has to be divisible
+			// by the local dimension numbers
+			size_t globalThreadsCenters = K;
+			size_t localThreadsCenters = 1;
+
+		while (centers_move)
+		{		
+			status = clEnqueueNDRangeKernel(commandQueue, assignCentroids, 2, NULL, globalThreadsPixels,	localThreadsPixels,	0, NULL, &event_assignCentroids);
+			CheckOpenCLError(status, "clEnqueueNDRangeKernel assignCentroids.");
+			status = clWaitForEvents(1, &event_assignCentroids);
+			CheckOpenCLError(status, "clWaitForEvents assignCentroids.");
+
+
+			status = clEnqueueNDRangeKernel(commandQueue, recomputeCenters, 1, NULL, &globalThreadsCenters, &localThreadsCenters, 1, &event_assignCentroids, &event_recomputeCenters);
+			CheckOpenCLError(status, "clEnqueueNDRangeKernel recomputeCenters.");
+			status = clWaitForEvents(1, &event_recomputeCenters);
+			CheckOpenCLError(status, "clWaitForEvents recompute centers.");
+
+			// kopie starych hodnot centroidu		
+			memcpy(oldCenters, centers, K * sizeof(cl_uchar4));
+
+			status = clEnqueueReadBuffer(commandQueue, d_centroids, CL_TRUE, 0, K * sizeof(cl_uchar4), centers, 0, 0, 0);
+			CheckOpenCLError(status, "read new centers.");
+
+			// porovname stare a nove stredy, pokud se nezmenily, tak koncime
+			for (int i = 0; i < K; i++)
+			{
+				if (oldCenters[i].s[0] == centers[i].s[0] && oldCenters[i].s[1] == centers[i].s[1] && oldCenters[i].s[2] == centers[i].s[2])
+				{
+					centers_move = false;
+				}
+			}
+		} // while
+
+
+		//////////////////////////////////////////////////////////////////////////////////////////////////
+		printTiming(event_assignCentroids, "K-means Result: ");
+
+		//Read back the image - if textures were used for showing this wouldn't be necessary
+		//blocking read
+		status = clEnqueueReadBuffer(commandQueue, d_outputImageBuffer, CL_TRUE, 0, width * height * sizeof (cl_uchar4), h_outputImageData, 0, 0, 0);
+		CheckOpenCLError(status, "read output.");
+
+		t_end = GetTime();
+	} // else - zpracovani v OpenCL
+
+	printf("Vypocet: %fs\n", t_end - t_start);
 
     return 0;
 }
@@ -667,7 +783,7 @@ int runKMeansKernels()
  */
 int runMeanShiftKernels()
 {
-    int status;
+	int status;
     cl_event event_meanshift;
 
     /* Setup arguments to the kernel */
