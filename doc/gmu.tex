@@ -42,23 +42,25 @@ Rozhodli jsme se tedy spustit v~obou případech (paralelní a seriové zpracova
 Výsledky jsou uvedeny níže v tabulce:
 
 \begin{center}
-    \begin{tabular}{| c | c | c | c | c | c | c |}
-      \multicolumn{7}{ c }{K-means} \\
+    \begin{tabular}{| c | c | c | c | c | c | c | c |}
+      \multicolumn{8}{ c }{K-means} \\
       \hline
-      Obrázek   &  K  & C2D E6850 (CPU) & Intel i7 (CPU) & NVIDIA GT218M (GPU) & HD 4870 (GPU) & Akcelerace \\
+      Obrázek   & K    & E6850    & i7      & GT218M  & HD4870  & GTX285   & E8200    \\
       \hline
-      512x512   & 16  &     1.889 s     &     0.103 s    &        0.548 s      &    0.604 s    & X krát \\
-      1920x1200 & 128 &    13.688 s     &     5.655 s    &        N/A s        &    5.195 s    & X krát \\
+      512x512   & 16   & 1.889 s  & 0.103 s & 0.548 s & 0.604 s & N/A s    & N/A s    \\
+      1920x1200 & 128  & 13.688 s & 5.655 s & N/A s   & 5.195 s & 10.303 s & 7.072 s  \\
+      1920x1200 & 1000 & N/A s    & N/A s   & N/A s   & N/A s s & 10.307 s & 46.149 s \\
       \hline
     \end{tabular}
 \end{center}
 \begin{center}
-    \begin{tabular}{| c | c | c | c | c | c | c |}
-      \multicolumn{7}{ c }{Mean-shift} \\
+    \begin{tabular}{| c | c | c | c | c | c | c | c |}
+      \multicolumn{8}{ c }{Mean-shift} \\
       \hline
-      Obrázek & Velikost okna & C2D E6850 (CPU) & Intel i7 (CPU) & NVIDIA GT218M (GPU) & HD 4870 (GPU) & Akcelerace \\
+      Obrázek & Okno   & E6850    & i7      & GT218M  & HD4870   & GTX285 & E8200    \\
       \hline
-      128x128 &      25       &      1.837 s    &     4.142 s    &      2.310 s        &    0.465 s    & X krát \\
+      128x128 & 25     & 1.837 s  & 4.142 s & 2.310 s & 0.465 s  & N/A s  & N/A s    \\
+      512x512 & 25     & N/A s    & N/A s   & N/A s   & N/A s    & 13.059 & N/A s    \\
       \hline
     \end{tabular}
 \end{center}
