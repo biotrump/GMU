@@ -21,7 +21,7 @@
     \usebeamerfont{title in head/foot}\insertshortsubtitle
   \end{beamercolorbox}%
   \begin{beamercolorbox}[wd=.333333\paperwidth,ht=2.25ex,dp=1ex,center]{date in head/foot}%
-    \usebeamerfont{date in head/foot}\insertframenumber/7
+    \usebeamerfont{date in head/foot}\insertframenumber/6
   \end{beamercolorbox}}%
   \vskip0pt%
 }
@@ -71,19 +71,28 @@
 
 \begin{frame}{K-means - ukázka výstupu}
   \begin{center}
-    \includegraphics[width=4cm,keepaspectratio]{images/km.pdf}
+    \includegraphics[width=4cm,keepaspectratio]{images/img.pdf}
+    \quad
+    \includegraphics[width=4cm,keepaspectratio]{images/km.pdf}\\ \medskip
+    \includegraphics[width=4cm,keepaspectratio]{images/sobel.pdf}
+    \quad
+    \includegraphics[width=4cm,keepaspectratio]{images/sobel_km.pdf}
   \end{center}
 \end{frame}
 
 
 \begin{frame}{Mean-shift}
   \begin{itemize}
-    \item Využito pro segmentaci
+    \item Využito pro segmentaci obrazu (3D barevný prostor RGB)
+    \item Počet shluků je zvolen automaticky
+    \item Bez optimalizací
     \medskip
-    \item Vše v jednom kernelu
+    \item Jeden kernel pro každý bod obrazu X
     \medskip
       \begin{itemize}
-        \item
+        \item Vypočítá se střed (mean) S pro okno okolo X
+        \item Přesune se okno tak, aby S bylo středem okna
+        \item Pokud posunutí (shift) je větší než limit, iterujeme
       \end{itemize}
     \medskip
   \end{itemize}
@@ -92,12 +101,17 @@
 
 \begin{frame}{Mean-shift - ukázka výstupu}
   \begin{center}
-    \includegraphics[width=4cm,keepaspectratio]{images/ms.pdf}
+    \includegraphics[width=4cm,keepaspectratio]{images/img.pdf}
+    \quad
+    \includegraphics[width=4cm,keepaspectratio]{images/ms.pdf}\\ \medskip
+    \includegraphics[width=4cm,keepaspectratio]{images/sobel.pdf}
+    \quad
+    \includegraphics[width=4cm,keepaspectratio]{images/sobel_ms.pdf}
   \end{center}
 \end{frame}
 
 
-\begin{frame}{Zrychlení výpočtů}
+\begin{frame}{Závěr}
   \begin{center}
     \begin{tabular}{| c | c | c || c | c | c |}
       \hline
@@ -109,15 +123,21 @@
       \hline
     \end{tabular}
   \end{center}
+  \medskip
+  \medskip
+  \medskip
+  \medskip
+  \medskip
+  \medskip
+  
+  \begin{center}
+    Děkujeme za pozornost!\\
+  %\end{center}
+  \medskip
+  %\begin{right}
+    \textbf{Martin Šimon \& Pavel Širůček}
+  \end{center}
 \end{frame}
 
-
-\begin{frame}{Zdroje}
-  \begin{itemize}
-    \item 2. cvičení GMU
-    \item k-means clustering [http://en.wikipedia.org/wiki/K-means\_clustering]
-    \item Meanshift [http://en.wikipedia.org/wiki/Mean-shift]
-  \end{itemize}
-\end{frame}
 
 \end{document}
