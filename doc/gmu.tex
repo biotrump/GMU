@@ -42,13 +42,24 @@ Rozhodli jsme se tedy spustit v~obou případech (paralelní a seriové zpracova
 Výsledky jsou uvedeny níže v tabulce:
 
 \begin{center}
-    \begin{tabular}{| c | c | c || c | c | c |}
-    \hline
-      \multicolumn{3}{| c ||}{K-means} & \multicolumn{3}{ c |}{Mean-shift} \\
+    \begin{tabular}{| c | c | c | c | c | c | c |}
+      \multicolumn{7}{ c }{K-means} \\
       \hline
-      CPU & GPU & Akcelerace & CPU & GPU & Akcelerace\\
+      Obrázek & K & C2D E6850 & skolni CPU & skolni GPU & HD 4870 & Akcelerace \\
       \hline
-      20ms & ?ms & ?x & 20ms & ?ms & ?x\\
+      512x512 & 16 & 1.889 s & X s & X s & 0.604 s & X krát \\
+      1920x1200 & 128 & 13.688 s & X s & X s & 5.195 s & X krát \\
+      \hline
+    \end{tabular}
+\end{center}
+\begin{center}
+    \begin{tabular}{| c | c | c | c | c | c | c |}
+      \multicolumn{7}{ c }{Mean-shift} \\
+      \hline
+      Obrázek & Velikost okna & C2D E6850 & skolni CPU & skolni GPU & HD 4870 & Akcelerace \\
+      \hline
+      128x128 & 25 & 1.837 s & X s & X s & 0.465 s & X krát \\
+      xxx & 25 & X s & X s & X s & spadlo & X krát \\
       \hline
     \end{tabular}
 \end{center}
